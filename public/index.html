@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Qamir AI</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#171a21}
+button,input,textarea{font:inherit}button{cursor:pointer;border:0}
+.hidden{display:none!important}.app{min-height:100vh;display:flex}.sidebar{width:260px;background:#101522;color:white;padding:18px;display:flex;flex-direction:column;gap:14px}.brand{font-size:23px;font-weight:800;padding:8px}.nav button{width:100%;padding:12px;margin:4px 0;border-radius:10px;background:#1b2232;color:#fff;text-align:left}.nav button.active,.nav button:hover{background:#2d3850}.main{flex:1;display:flex;flex-direction:column;min-width:0}.top{height:64px;background:white;border-bottom:1px solid #e7eaf0;display:flex;align-items:center;justify-content:space-between;padding:0 22px}.content{padding:22px;max-width:1200px;width:100%;margin:auto}.card{background:#fff;border:1px solid #e7eaf0;border-radius:16px;padding:20px;box-shadow:0 8px 25px #1111;margin-bottom:16px}.login{min-height:100vh;display:grid;place-items:center;padding:20px}.login-card{width:min(420px,100%);background:#fff;padding:30px;border-radius:20px;box-shadow:0 15px 50px #0002}.field{margin:10px 0}.field label{display:block;font-size:13px;margin-bottom:6px;color:#606774}.field input,.field textarea{width:100%;padding:12px;border:1px solid #d9dde5;border-radius:10px;outline:none}.field textarea{min-height:130px;resize:vertical}.btn{padding:11px 15px;border-radius:10px;background:#20293a;color:white}.btn.secondary{background:#eef1f6;color:#1c2230}.btn.danger{background:#c62828}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.muted{color:#737b89;font-size:13px}.chat{height:calc(100vh - 64px);display:flex;flex-direction:column}.messages{flex:1;overflow:auto;padding:25px;display:flex;flex-direction:column;gap:12px}.bubble{max-width:min(760px,85%);padding:12px 15px;border-radius:16px;white-space:pre-wrap;line-height:1.5}.user{align-self:flex-end;background:#20293a;color:#fff;border-bottom-right-radius:4px}.assistant{align-self:flex-start;background:#fff;border:1px solid #e4e7ed;border-bottom-left-radius:4px}.composer{padding:15px;background:#fff;border-top:1px solid #e7eaf0;display:flex;gap:10px}.composer textarea{flex:1;min-height:48px;max-height:150px;padding:12px;border:1px solid #d9dde5;border-radius:12px;resize:none}.avatar{width:70px;height:70px;border-radius:50%;object-fit:cover;background:#e9edf3;display:grid;place-items:center;font-size:25px}.user-row{display:flex;gap:12px;align-items:center;padding:12px;border:1px solid #e5e8ee;border-radius:12px;margin:8px 0}.user-row:hover{background:#f7f8fb}.admin-panel{display:grid;grid-template-columns:320px 1fr;gap:16px}.small-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#e9edf3}.status{padding:7px 10px;border-radius:20px;background:#eef1f6;font-size:12px}.ok{background:#e7f7ed;color:#147a3d}@media(max-width:800px){.sidebar{width:76px;padding:10px}.brand{font-size:0}.brand:after{content:"Q";font-size:24px}.nav button{font-size:0;text-align:center}.nav button:before{content:"•";font-size:20px}.content{padding:12px}.admin-panel{grid-template-columns:1fr}.bubble{max-width:92%}}
+</style>
+</head>
+<body>
+<div id="loginView" class="login">
+  <div class="login-card">
+    <h1>Qamir AI</h1>
+    <p class="muted">Shaxsiy AI yordamchingiz</p>
+    <div id="loginForm">
+      <div class="field"><label>Username</label><input id="loginUser" autocomplete="username"></div>
+      <div class="field"><label>Parol</label><input id="loginPass" type="password" autocomplete="current-password"></div>
+      <button class="btn" style="width:100%" onclick="login()">Kirish</button>
+      <button class="btn secondary" style="width:100%;margin-top:8px" onclick="showRegister()">Ro'yxatdan o'tish</button>
+    </div>
+    <div id="registerForm" class="hidden">
+      <div class="field"><label>Username</label><input id="regUser"></div>
+      <div class="field"><label>Email</label><input id="regEmail" type="email"></div>
+      <div class="field"><label>Parol</label><input id="regPass" type="password"></div>
+      <button class="btn" style="width:100%" onclick="register()">Ro'yxatdan o'tish</button>
+      <button class="btn secondary" style="width:100%;margin-top:8px" onclick="showLogin()">Login</button>
+    </div>
+    <div id="loginMsg" class="muted" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<div id="appView" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand">Qamir AI</div>
+    <div class="nav">
+      <button id="chatNav" onclick="page('chat')" class="active">💬 Chat</button>
+      <button onclick="page('profile')">👤 Profil</button>
+      <button id="adminNav" class="hidden" onclick="page('admin')">⚙️ Admin</button>
+      <button onclick="logout()">🚪 Chiqish</button>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="top"><b id="pageTitle">Qamir AI</b><span id="topUser" class="muted"></span></header>
+    <section id="chatPage" class="chat">
+      <div id="messages" class="messages"></div>
+      <div class="composer">
+        <textarea id="chatInput" placeholder="Xabaringizni yozing..." onkeydown="chatKey(event)"></textarea>
+        <button class="btn" onclick="sendMessage()">Yuborish</button>
+      </div>
+    </section>
+    <section id="profilePage" class="content hidden"></section>
+    <section id="adminPage" class="content hidden"></section>
+  </main>
+</div>
+
+<script>
+const state={token:localStorage.getItem("qamir_token"),user:null,admin:false,page:"chat"};
+const $=id=>document.getElementById(id);
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function api(path,options={}){options.headers={...(options.headers||{}),...(state.token?{Authorization:"Bearer "+state.token}:{})};return fetch(path,options).then(async r=>{const d=await r.json().catch(()=>({error:"Server javobi noto'g'ri"}));if(!r.ok)throw new Error(d.error||d.detail||"Xato");return d})}
+function showRegister(){$("loginForm").classList.add("hidden");$("registerForm").classList.remove("hidden");$("loginMsg").textContent=""}
+function showLogin(){$("registerForm").classList.add("hidden");$("loginForm").classList.remove("hidden");$("loginMsg").textContent=""}
+async function register(){try{const d=await api("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:$("regUser").value,email:$("regEmail").value,password:$("regPass").value})});state.token=d.token;state.user=d.user;state.admin=false;startApp()}catch(e){$("loginMsg").textContent=e.message}}
+async function login(){try{const d=await api("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:$("loginUser").value,password:$("loginPass").value})});state.token=d.token;localStorage.setItem("qamir_token",d.token);state.user=d.user;state.admin=!!d.admin;startApp()}catch(e){$("loginMsg").textContent=e.message}}
+async function boot(){if(!state.token)return;try{const d=await api("/api/me");state.user=d.user;state.admin=false;startApp()}catch{localStorage.removeItem("qamir_token");state.token=null}}
+function startApp(){$("loginView").classList.add("hidden");$("appView").classList.remove("hidden");$("adminNav").classList.toggle("hidden",!state.admin);$("topUser").textContent=state.admin?"Admin":state.user.username;page("chat")}
+async function logout(){await api("/api/logout",{method:"POST"}).catch(()=>{});localStorage.removeItem("qamir_token");location.reload()}
+function page(p){state.page=p;$("chatPage").classList.toggle("hidden",p!=="chat");$("profilePage").classList.toggle("hidden",p!=="profile");$("adminPage").classList.toggle("hidden",p!=="admin");$("pageTitle").textContent=p==="chat"?"Qamir AI":p==="profile"?"Profil":"Admin panel";if(p==="chat")loadChat();if(p==="profile")renderProfile();if(p==="admin")renderAdmin()}
+async function loadChat(){const d=await api("/api/chat/history");$("messages").innerHTML="";if(!d.messages.length)addBubble("assistant","Salom! Men Qamir AI. 😊");d.messages.forEach(m=>addBubble(m.sender,m.text));scrollChat()}
+function addBubble(sender,text){const el=document.createElement("div");el.className="bubble "+(sender==="user"?"user":"assistant");el.textContent=text;$("messages").appendChild(el)}
+function scrollChat(){$("messages").scrollTop=$("messages").scrollHeight}
+function chatKey(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage()}}
+async function sendMessage(){const input=$("chatInput"),text=input.value.trim();if(!text)return;input.value="";addBubble("user",text);scrollChat();try{const d=await api("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:text})});addBubble("assistant",d.reply);scrollChat()}catch(e){addBubble("assistant","Xatolik: "+e.message);scrollChat()}}
+function renderProfile(){const u=state.user;const avatar=u.avatar?u.avatar:"";$("profilePage").innerHTML=`
+<div class="card"><h2>Profil</h2><div class="row">
+<img id="avatarImg" class="avatar" src="${avatar||''}" onerror="this.style.display='none'">
+<div><b>${esc(u.username)}</b><div class="muted">Ro'yxatdan o'tgan: ${esc(u.createdAt||"")}</div></div>
+</div></div>
+<div class="card"><h3>Shaxsiy ma'lumotlar</h3>
+<div class="field"><label>To'liq ism</label><input id="fullName" value="${esc(u.fullName)}"></div>
+<div class="field"><label>Email</label><input id="email" value="${esc(u.email)}"></div>
+<div class="field"><label>Tug'ilgan sana (oy/kun/yil)</label><input id="birthday" type="date" value="${esc(u.birthday)}"></div>
+<div class="field"><label>Shahar / qayerda turasiz</label><input id="city" value="${esc(u.city)}"></div>
+<div class="row"><button class="btn" onclick="saveProfile()">Saqlash</button>
+<label class="btn secondary">Rasm yuklash<input hidden type="file" accept="image/*" onchange="uploadAvatar(this)"></label></div></div>
+<div class="card"><h3>Login parolini o'zgartirish</h3>
+<div class="field"><label>Eski parol</label><input id="oldPass" type="password"></div>
+<div class="field"><label>Yangi parol</label><input id="newPass" type="password"></div>
+<button class="btn" onclick="changePassword()">Parolni almashtirish</button></div>`}
+async function saveProfile(){try{const d=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName:$("fullName").value,email:$("email").value,birthday:$("birthday").value,city:$("city").value})});state.user=d.user;renderProfile();$("topUser").textContent=state.user.username;alert("Profil saqlandi.")}catch(e){alert(e.message)}}
+async function uploadAvatar(input){if(!input.files[0])return;const fd=new FormData();fd.append("avatar",input.files[0]);try{const d=await api("/api/profile/avatar",{method:"POST",body:fd});state.user=d.user;renderProfile();alert("Rasm saqlandi.")}catch(e){alert(e.message)}}
+async function changePassword(){try{await api("/api/profile/password",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({currentPassword:$("oldPass").value,newPassword:$("newPass").value})});alert("Parol o'zgartirildi.")}catch(e){alert(e.message)}}
+async function renderAdmin(){if(!state.admin)return;$("adminPage").innerHTML='<div class="admin-panel"><div><div class="card"><h3>Foydalanuvchilar</h3><div id="usersList">Yuklanmoqda...</div></div></div><div id="adminRight"><div class="card"><h2>Agent sozlamalari</h2><p class="muted">Bu yerga agent qanday gapirishi kerakligini yozing. Gemini key bo'lmasa ham fallback rejim shu sozlamadan foydalanadi.</p><div class="field"><label>Sayt nomi</label><input id="siteName"></div><div class="field"><label>Agent nomi</label><input id="assistantName"></div><div class="field"><label>Agent ko'rsatmasi / bilimlari</label><textarea id="systemPrompt"></textarea></div><div class="field"><label>Salomlashuv</label><textarea id="welcome"></textarea></div><button class="btn" onclick="saveSettings()">Sozlamani saqlash</button><span id="geminiStatus" class="status" style="margin-left:8px"></span></div></div></div>';
+try{const s=await api("/api/admin/settings");$("siteName").value=s.settings.siteName;$("assistantName").value=s.settings.assistantName;$("systemPrompt").value=s.settings.systemPrompt;$("welcome").value=s.settings.welcome;$("geminiStatus").textContent=s.geminiConfigured?"Gemini API ulangan":"Gemini API ulanmagan — fallback ishlaydi";$("geminiStatus").className="status "+(s.geminiConfigured?"ok":"");const u=await api("/api/admin/users");$("usersList").innerHTML=u.users.length?u.users.map(x=>`<div class="user-row" onclick="openAdminUser('${x.id}')">${x.avatar?`<img class="small-avatar" src="${x.avatar}">`:`<div class="small-avatar"></div>`}<div><b>${esc(x.username)}</b><div class="muted">${x.messageCount} ta xabar</div></div></div>`).join(""):"Hali foydalanuvchi yo'q"}catch(e){$("adminRight").innerHTML='<div class="card">'+esc(e.message)+'</div>'}}
+async function saveSettings(){try{await api("/api/admin/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({siteName:$("siteName").value,assistantName:$("assistantName").value,systemPrompt:$("systemPrompt").value,welcome:$("welcome").value})});alert("Agent sozlamalari saqlandi.")}catch(e){alert(e.message)}}
+async function openAdminUser(id){try{const d=await api("/api/admin/users/"+id+"/messages");$("adminRight").innerHTML='<div class="card"><div class="row"><button class="btn secondary" onclick="renderAdmin()">← Orqaga</button><h2>'+esc(d.user.username)+'</h2></div><div id="adminChat" class="messages" style="height:55vh;border:1px solid #eee;border-radius:12px"></div><div class="composer"><textarea id="adminReply" placeholder="Admin javobi..."></textarea><button class="btn" onclick="adminReply(\''+id+'\')">Yuborish</button></div></div>';d.messages.forEach(m=>addAdminBubble(m.sender,m.text))}catch(e){alert(e.message)}}
+function addAdminBubble(sender,text){const el=document.createElement("div");el.className="bubble "+(sender==="user"?"user":"assistant");el.textContent=text;$("adminChat").appendChild(el);$("adminChat").scrollTop=$("adminChat").scrollHeight}
+async function adminReply(id){const text=$("adminReply").value.trim();if(!text)return;try{const d=await api("/api/admin/reply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:id,message:text})});$("adminReply").value="";addAdminBubble("admin",d.message.text)}catch(e){alert(e.message)}}
+boot();
+</script>
+</body>
+</html>
