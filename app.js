@@ -1735,4 +1735,7 @@ ${
     $("greeting").value =
       state.greeting;
 
-    $("askStyle
+    $("askStyle").value =
+      state.askStyle;
+
+    $("api
