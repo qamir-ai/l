@@ -77,7 +77,7 @@
       BILIM-1
       BILIM 1:
     */
-    const re=/(?:^|\n)\s*(?:(?:[-*#]?\s*)?(?:BILIM|BILIMI)\s*(?:#\s*)?(\d+)\s*(?:[-–—:]?\s*)|(\d+)\s*[-–—:]?\s*(?:BILIM|BILIMI)\s*(?:[-–—:]?\s*))/gim;
+    const re=/(?:^|\s)(?:(\d+)\s*[-–—:]\s*(?:BILIM|BILIMI)\b|(?:BILIM|BILIMI)\s*#?\s*(\d+)\b)/gim;
     const marks=[]; let m;
     while((m=re.exec(src))!==null){
       marks.push({
@@ -101,7 +101,7 @@
 
   function extractQuestionAnswer(block){
     const s=normalizeKnowledgeText(block);
-    const q=s.match(/(?:^|\n)\s*Savol\s*:\s*([\s\S]*?)(?=\n\s*(?:Ma['’]lumot|Javob)\s*:)/i);
+    const q=s.match(/(?:^|\s)Savol\s*:\s*([\s\S]*?)(?=\s+(?:Ma['’]lumot|Javob)\s*:)/i);
     const a=s.match(/(?:^|\n)\s*(?:Ma['’]lumot|Javob)\s*:\s*([\s\S]*)/i);
     return {
       question:q?q[1].trim():"",
@@ -149,15 +149,16 @@
   }
 
   function findRelevantKnowledge(query,limit=1){
-    const items=state.knowledge.filter(k=>k.enabled!==false).map(k=>{
-      const qa=extractQuestionAnswer(k.text);
-      return {k,qa,score:similarityScore(query,{k,qa})};
+    const items=[];
+    state.knowledge.filter(k=>k.enabled!==false).forEach((k,ki)=>{
+      const blocks=splitKnowledgeBlocks(k.text||"");
+      blocks.forEach((b,i)=>{
+        const qa=extractQuestionAnswer(b.text);
+        const virtual={...k,id:`${k.id||ki}-v-${i}`,title:qa.question||k.title,text:b.text};
+        items.push({k:virtual,qa,score:similarityScore(query,{k:virtual,qa})});
+      });
     });
-
-    return items
-      .filter(x=>x.score>0)
-      .sort((a,b)=>b.score-a.score)
-      .slice(0,Math.max(1,limit));
+    return items.filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,Math.max(1,limit));
   }
 
   /*
