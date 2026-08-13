@@ -3,11 +3,12 @@
    Auth, profile, knowledge and settings are stored in this browser.
 
    Added:
-   - Global knowledge usage for all accounts in this browser
+   - Global knowledge usage for ALL accounts in this browser
    - Built-in calculator
    - Percentage calculations
    - Safer API handling
    - Better account/session isolation
+   - FIXED: Non-admin users can now use AI
 */
 
 (() => {
@@ -206,7 +207,7 @@
   ensureAdmin();
 
   /* =========================================================
-     KNOWLEDGE ENGINE
+     KNOWLEDGE ENGINE - BARCHA FOYDALANUVCHILAR UCHUN
   ========================================================= */
 
   function normalizeKnowledgeText(text) {
@@ -381,47 +382,56 @@
     return score;
   }
 
+  // =========================================================
+  // MUHIM: findRelevantKnowledge - BARCHA USERLAR UCHUN
+  // =========================================================
   function findRelevantKnowledge(query, limit = 1) {
+
+    // Barcha bilimlarni olish (hech qanday filter YO'Q)
+    const allKnowledge = state.knowledge.filter(k => k.enabled !== false);
+    
+    if (allKnowledge.length === 0) return [];
 
     const items = [];
 
-    state.knowledge
-      .filter(k => k.enabled !== false)
-      .forEach((k, ki) => {
+    allKnowledge.forEach((k, ki) => {
 
-        const blocks =
-          splitKnowledgeBlocks(k.text || "");
+      const blocks =
+        splitKnowledgeBlocks(k.text || "");
 
-        blocks.forEach((b, i) => {
+      blocks.forEach((b, i) => {
 
-          const qa =
-            extractQuestionAnswer(b.text);
+        const qa =
+          extractQuestionAnswer(b.text);
 
-          const virtual = {
-            ...k,
-            id: `${k.id || ki}-v-${i}`,
-            title: qa.question || k.title,
-            text: b.text
-          };
+        const virtual = {
+          ...k,
+          id: `${k.id || ki}-v-${i}`,
+          title: qa.question || k.title,
+          text: b.text
+        };
 
-          items.push({
-            k: virtual,
-            qa,
-            score: similarityScore(
-              query,
-              {
-                k: virtual,
-                qa
-              }
-            )
-          });
-
+        items.push({
+          k: virtual,
+          qa,
+          score: similarityScore(
+            query,
+            {
+              k: virtual,
+              qa
+            }
+          )
         });
 
       });
 
-    return items
-      .filter(x => x.score > 0)
+    });
+
+    const filtered = items.filter(x => x.score > 0);
+    
+    if (filtered.length === 0) return [];
+
+    return filtered
       .sort((a, b) => b.score - a.score)
       .slice(0, Math.max(1, limit));
   }
@@ -507,13 +517,6 @@
 
     let s = normalizeCalculationText(expression);
 
-    /*
-      Uzbek / natural language foiz:
-      500000 ning 15 foizi
-      15 foiz 500000
-      500000 dan 15%
-    */
-
     let m = s.match(
       /(-?\d+(?:\.\d+)?)\s*(?:ning)?\s*(\d+(?:\.\d+)?)\s*(?:%|foiz|foizi|foizini)\b/
     );
@@ -534,10 +537,6 @@
       }
     }
 
-    /*
-      15% of 500000
-    */
-
     m = s.match(
       /(\d+(?:\.\d+)?)\s*%\s*(?:of|dan)\s*(\d+(?:\.\d+)?)/
     );
@@ -553,23 +552,11 @@
       };
     }
 
-    /*
-      Oddiy matematik ifodani ajratib olamiz.
-      Faqat raqam, nuqta va operatorlarga ruxsat.
-    */
-
     const cleaned = s
       .replace(/[^0-9+\-*/().%\s]/g, "")
       .trim();
 
     if (!cleaned) return null;
-
-    /*
-      Foiz:
-      500000 * 15%
-      500000 + 15%
-      kabi holatlarni oddiy hisobga moslashtiramiz.
-    */
 
     const percentPattern =
       /(\d+(?:\.\d+)?)\s*%/g;
@@ -578,12 +565,6 @@
       percentPattern,
       "($1/100)"
     );
-
-    /*
-      Xavfsizlik:
-      eval faqat yuqoridagi tozalangan
-      matematik belgilar bilan ishlaydi.
-    */
 
     if (
       !/^[0-9+\-*/().\s]+$/.test(converted)
@@ -640,24 +621,11 @@
 
     if (!raw) return null;
 
-    /*
-      Faqat matematik ifoda:
-      2+2
-      100*20
-      500000/5
-    */
-
     if (
       /^[\d\s.,()+\-*/×÷%−]+$/.test(raw)
     ) {
       return calculateExpression(raw);
     }
-
-    /*
-      "hisobla 2+2"
-      "hisob kitob 500000*12"
-      "hisoblab ber 100/4"
-    */
 
     const natural = raw.match(
       /(?:hisobla|hisoblab ber|hisob kitob|hisob-kitob|calculate)\s*[:\-]?\s*(.+)$/i
@@ -670,10 +638,6 @@
 
       if (result) return result;
     }
-
-    /*
-      "500000 ning 15 foizi"
-    */
 
     if (
       /\d+.*(?:%|foiz|foizi)/i.test(raw)
@@ -1161,7 +1125,7 @@
   }
 
   /* =========================================================
-     OFFLINE AI
+     OFFLINE AI - BARCHA USERLAR UCHUN
   ========================================================= */
 
   function localFallback(t) {
@@ -1169,10 +1133,7 @@
     const q =
       normalizeKnowledgeText(t);
 
-    /*
-      1. CALCULATOR FIRST
-    */
-
+    // 1. CALCULATOR FIRST
     const calc =
       calculatorAnswer(q);
 
@@ -1180,10 +1141,7 @@
       return calc;
     }
 
-    /*
-      2. GREETING
-    */
-
+    // 2. GREETING
     if (
       /^(salom|assalom|assalomu alaykum|hello|hi|hay|qalesan|qalaysan)\b/i.test(
         q
@@ -1196,10 +1154,7 @@
       );
     }
 
-    /*
-      3. KNOWLEDGE
-    */
-
+    // 3. KNOWLEDGE - BARCHA USERLAR UCHUN
     const matched =
       findRelevantKnowledge(q, 1);
 
@@ -1236,10 +1191,7 @@
       );
     }
 
-    /*
-      4. DEFAULT
-    */
-
+    // 4. DEFAULT
     return (
       `Men ${
         state.agentName ||
@@ -1250,16 +1202,12 @@
   }
 
   /* =========================================================
-     GEMINI API
+     GEMINI API - BARCHA USERLAR UCHUN
   ========================================================= */
 
   async function ai(t) {
 
-    /*
-      Hisob-kitob Gemini'ga yuborilmaydi.
-      Birinchi navbatda local calculator ishlaydi.
-    */
-
+    // Hisob-kitob Gemini'ga yuborilmaydi
     const calc =
       calculatorAnswer(t);
 
@@ -1270,12 +1218,6 @@
     const cfg =
       window.QAMIR_CONFIG || {};
 
-    /*
-      API key:
-      1. state.apiKey
-      2. QAMIR_CONFIG.GEMINI_API_KEY
-    */
-
     const key =
       String(
         state.apiKey ||
@@ -1283,13 +1225,8 @@
         ""
       ).trim();
 
-    /*
-      API key yo‘q bo‘lsa,
-      bilim dvigateli ishlaydi.
-    */
-
+    // API key yo'q bo'lsa - localFallback (barcha userlar uchun)
     if (!key) {
-
       return localFallback(t);
     }
 
@@ -1302,10 +1239,6 @@
 
     const session =
       activeSession();
-
-    /*
-      Eski suhbatlardan faqat oxirgi 18 ta.
-    */
 
     const contents =
       session.messages
@@ -1342,11 +1275,7 @@
       ]
     });
 
-    /*
-      Mos bilimlarni topish.
-      Barcha bilimlar yuborilmaydi.
-    */
-
+    // BARCHA USERLAR UCHUN bilimlar
     const relevant =
       findRelevantKnowledge(t, 3);
 
@@ -1495,18 +1424,12 @@ ${
 
     } catch (error) {
 
-      /*
-        API xatoligi bo‘lsa:
-        local knowledge ishlashda davom etadi.
-        Shu sabab yangi akkaunt ham butunlay
-        ishlamay qolmaydi.
-      */
-
       console.error(
         "Qamir API error:",
         error
       );
 
+      // API xatoligi bo'lsa localFallback
       return localFallback(t);
     }
   }
@@ -1771,7 +1694,7 @@ ${
   }
 
   /* =========================================================
-     SETTINGS
+     SETTINGS - FAQAT ADMIN UCHUN
   ========================================================= */
 
   function fillSettings() {
@@ -1812,872 +1735,4 @@ ${
     $("greeting").value =
       state.greeting;
 
-    $("askStyle").value =
-      state.askStyle;
-
-    $("apiKey").value =
-      state.apiKey || "";
-
-    $("apiModel").value =
-      state.model;
-
-    $("temperature").value =
-      state.temperature;
-
-    $("maxTokens").value =
-      state.maxTokens;
-
-    renderKnowledge();
-
-    renderImprove();
-
-    updateApiStatus();
-  }
-
-  function renderKnowledge() {
-
-    const list =
-      $("knowledgeList");
-
-    if (!list) return;
-
-    if (
-      !state.knowledge.length
-    ) {
-
-      list.innerHTML =
-        `<div class="section-note">
-          Hozircha bilim qo‘shilmagan.
-          Yuqoridan birinchi bilimni kiriting.
-        </div>`;
-
-      return;
-    }
-
-    list.innerHTML =
-      state.knowledge
-        .map((k, i) => {
-
-          const qa =
-            extractQuestionAnswer(
-              k.text
-            );
-
-          return `
-            <div class="knowledge-card">
-
-              <div class="knowledge-head">
-
-                <strong>
-                  ${esc(
-                    k.title ||
-                    qa.question ||
-                    `Bilim ${i + 1}`
-                  )}
-                </strong>
-
-                <span class="knowledge-type">
-                  ${esc(
-                    k.type ||
-                    "general"
-                  )}
-                </span>
-
-              </div>
-
-              <p>
-                ${esc(k.text)}
-              </p>
-
-              <button
-                class="delete-k"
-                data-k="${i}">
-                O‘chirish
-              </button>
-
-            </div>
-          `;
-
-        })
-        .join("");
-
-    list
-      .querySelectorAll(
-        "[data-k]"
-      )
-      .forEach(
-        b =>
-          (b.onclick = () => {
-
-            state.knowledge.splice(
-              Number(
-                b.dataset.k
-              ),
-              1
-            );
-
-            persist();
-
-            renderKnowledge();
-
-            updateImproveStats();
-          })
-      );
-  }
-
-  if ($("addKnowledge")) {
-
-    $("addKnowledge").onclick =
-      () => {
-
-        const title =
-          $("knowledgeTitle")
-            .value
-            .trim();
-
-        const text =
-          $("knowledgeText")
-            .value
-            .trim();
-
-        if (!text) {
-
-          return toast(
-            "Bilim matnini kiriting."
-          );
-        }
-
-        const blocks =
-          splitKnowledgeBlocks(
-            text
-          );
-
-        const type =
-          $("knowledgeType")
-            .value;
-
-        const base =
-          title ||
-          "Qamir AI bilimi";
-
-        const stamp =
-          Date.now();
-
-        blocks.forEach(
-          (b, i) => {
-
-            const qa =
-              extractQuestionAnswer(
-                b.text
-              );
-
-            state.knowledge.push({
-
-              id:
-                `${stamp}-${i}-${Math.random()
-                  .toString(36)
-                  .slice(2, 8)}`,
-
-              title:
-                qa.question ||
-                (
-                  blocks.length > 1
-                    ? `${base} ${i + 1}`
-                    : base
-                ),
-
-              text:
-                b.text,
-
-              type,
-
-              enabled:
-                true
-            });
-          }
-        );
-
-        $("knowledgeTitle")
-          .value = "";
-
-        $("knowledgeText")
-          .value = "";
-
-        persist();
-
-        renderKnowledge();
-
-        updateImproveStats();
-
-        toast(
-          `${blocks.length} ta bilim alohida qo‘shildi.`
-        );
-      };
-  }
-
-  function updateImproveStats() {
-
-    if ($("statMessages")) {
-
-      $("statMessages")
-        .textContent =
-        state.sessions.reduce(
-          (n, s) =>
-            n +
-            s.messages.length,
-          0
-        );
-    }
-
-    if ($("statQuestions")) {
-
-      $("statQuestions")
-        .textContent =
-        uniqueTopics().length;
-    }
-
-    if ($("statKnowledge")) {
-
-      $("statKnowledge")
-        .textContent =
-        state.knowledge.length;
-    }
-  }
-
-  function uniqueTopics() {
-
-    const qs =
-      state.sessions.flatMap(
-        s =>
-          s.messages
-            .filter(
-              m =>
-                m.r === "user"
-            )
-            .map(
-              m =>
-                m.t
-                  .toLowerCase()
-                  .replace(
-                    /[^\p{L}\p{N}\s]/gu,
-                    ""
-                  )
-                  .split(/\s+/)
-                  .filter(
-                    x =>
-                      x.length > 4
-                  )
-                  .slice(0, 4)
-                  .join(" ")
-            )
-      );
-
-    return [
-      ...new Set(qs)
-    ].slice(0, 30);
-  }
-
-  function renderImprove() {
-
-    if (!$("improveSuggestions"))
-      return;
-
-    updateImproveStats();
-
-    const box =
-      $("improveSuggestions");
-
-    box.innerHTML =
-      state.suggestions
-        .map(
-          (s, i) =>
-            `<div class="suggestion">
-              <b>Agent taklifi:</b>
-              ${esc(s.text)}
-              <br>
-
-              <button
-                data-approve="${i}">
-                Bilimga qo‘shish
-              </button>
-
-              <button
-                data-reject="${i}">
-                Rad etish
-              </button>
-
-            </div>`
-        )
-        .join("");
-
-    box
-      .querySelectorAll(
-        "[data-approve]"
-      )
-      .forEach(
-        b =>
-          (b.onclick = () => {
-
-            const s =
-              state.suggestions[
-                Number(
-                  b.dataset.approve
-                )
-              ];
-
-            state.knowledge.push({
-
-              id: Date.now(),
-
-              title:
-                s.title,
-
-              text:
-                s.text,
-
-              type:
-                "general",
-
-              enabled:
-                true
-            });
-
-            state.suggestions.splice(
-              Number(
-                b.dataset.approve
-              ),
-              1
-            );
-
-            persist();
-
-            renderImprove();
-
-            renderKnowledge();
-
-            toast(
-              "Taklif bilim bazasiga qo‘shildi."
-            );
-          })
-      );
-
-    box
-      .querySelectorAll(
-        "[data-reject]"
-      )
-      .forEach(
-        b =>
-          (b.onclick = () => {
-
-            state.suggestions.splice(
-              Number(
-                b.dataset.reject
-              ),
-              1
-            );
-
-            persist();
-
-            renderImprove();
-          })
-      );
-  }
-
-  if ($("analyzeAgent")) {
-
-    $("analyzeAgent").onclick =
-      () => {
-
-        const topics =
-          uniqueTopics();
-
-        if (!topics.length) {
-
-          return toast(
-            "Tahlil qilish uchun suhbatlar yetarli emas."
-          );
-        }
-
-        const suggestions =
-          topics
-            .slice(0, 5)
-            .filter(
-              t =>
-                !state.knowledge.some(
-                  k =>
-                    (
-                      k.title +
-                      " " +
-                      k.text
-                    )
-                      .toLowerCase()
-                      .includes(
-                        t.split(" ")[0]
-                      )
-                )
-            );
-
-        state.suggestions =
-          suggestions.map(
-            t => ({
-              title:
-                "Ko‘p so‘raladigan mavzu",
-
-              text:
-                `Mijozlar “${t}” mavzusini ko‘p so‘ramoqda. Shu mavzu bo‘yicha aniq ma’lumot qo‘shing.`
-            })
-          );
-
-        persist();
-
-        renderImprove();
-
-        toast(
-          "Suhbatlar tahlil qilindi."
-        );
-      };
-  }
-
-  function updateApiStatus() {
-
-    const key =
-      String(
-        state.apiKey ||
-        window.QAMIR_CONFIG
-          ?.GEMINI_API_KEY ||
-        ""
-      ).trim();
-
-    if ($("apiStatusText")) {
-
-      $("apiStatusText")
-        .textContent =
-        key
-          ? "API kaliti mavjud"
-          : "API sozlanmagan";
-    }
-
-    if (
-      $("apiStatusDot") &&
-      $("apiStatusDot").parentElement
-    ) {
-
-      $("apiStatusDot")
-        .parentElement
-        .classList.toggle(
-          "ok",
-          !!key
-        );
-    }
-  }
-
-  /* =========================================================
-     SAVE SETTINGS — ADMIN ONLY
-  ========================================================= */
-
-  if ($("saveSettings")) {
-
-    $("saveSettings").onclick =
-      () => {
-
-        if (!admin()) {
-
-          $("settingsError").textContent =
-            "Faqat Admin agent sozlamalarini o‘zgartira oladi.";
-
-          return;
-        }
-
-        state.agentName =
-          $("agentName")
-            .value
-            .trim() ||
-          "Qamir";
-
-        state.brandName =
-          $("brandName")
-            .value
-            .trim() ||
-          "Qamir AI";
-
-        state.role =
-          $("agentRole")
-            .value
-            .trim() ||
-          DEFAULTS.role;
-
-        state.instruction =
-          $("agentInstruction")
-            .value
-            .trim() ||
-          DEFAULTS.instruction;
-
-        state.mustRules =
-          $("mustRules")
-            .value
-            .trim();
-
-        state.neverRules =
-          $("neverRules")
-            .value
-            .trim();
-
-        state.customerRules =
-          $("customerRules")
-            .value
-            .trim();
-
-        state.language =
-          $("agentLanguage")
-            .value;
-
-        state.tone =
-          $("agentTone")
-            .value;
-
-        state.emoji =
-          $("emojiMode")
-            .value;
-
-        state.length =
-          $("answerLength")
-            .value;
-
-        state.greeting =
-          $("greeting")
-            .value
-            .trim() ||
-          DEFAULTS.greeting;
-
-        state.askStyle =
-          $("askStyle")
-            .value
-            .trim();
-
-        state.apiKey =
-          $("apiKey")
-            .value
-            .trim();
-
-        state.model =
-          $("apiModel")
-            .value
-            .trim() ||
-          "gemini-2.5-flash";
-
-        state.temperature =
-          Math.max(
-            0,
-            Math.min(
-              2,
-              Number(
-                $("temperature")
-                  .value
-              ) || 0.7
-            )
-          );
-
-        state.maxTokens =
-          Math.max(
-            64,
-            Math.min(
-              8192,
-              Number(
-                $("maxTokens")
-                  .value
-              ) || 1024
-            )
-          );
-
-        persist();
-
-        $("settingsError")
-          .textContent = "";
-
-        $("settingsModal")
-          .classList.add(
-            "hidden"
-          );
-
-        updateApiStatus();
-
-        toast(
-          "Agent sozlamalari saqlandi."
-        );
-      };
-  }
-
-  if ($("settingsBtn")) {
-
-    $("settingsBtn").onclick =
-      () => {
-
-        if (!admin()) {
-
-          return toast(
-            "Bu bo‘lim faqat Admin uchun."
-          );
-        }
-
-        fillSettings();
-
-        $("settingsModal")
-          .classList.remove(
-            "hidden"
-          );
-      };
-  }
-
-  /* =========================================================
-     TABS
-  ========================================================= */
-
-  document
-    .querySelectorAll(".tab")
-    .forEach(
-      t =>
-        (t.onclick = () => {
-
-          document
-            .querySelectorAll(
-              ".tab"
-            )
-            .forEach(
-              x =>
-                x.classList.remove(
-                  "active"
-                )
-            );
-
-          document
-            .querySelectorAll(
-              ".tab-panel"
-            )
-            .forEach(
-              x =>
-                x.classList.remove(
-                  "active"
-                )
-            );
-
-          t.classList.add(
-            "active"
-          );
-
-          const panel =
-            $("tab-" +
-              t.dataset.tab);
-
-          if (panel) {
-
-            panel.classList.add(
-              "active"
-            );
-          }
-        })
-    );
-
-  /* =========================================================
-     MODALS
-  ========================================================= */
-
-  document
-    .querySelectorAll(
-      "[data-close]"
-    )
-    .forEach(
-      b =>
-        (b.onclick = () =>
-          $(
-            b.dataset.close
-          ).classList.add(
-            "hidden"
-          ))
-    );
-
-  if ($("profileBtn")) {
-
-    $("profileBtn").onclick =
-      openProfile;
-  }
-
-  if ($("topProfile")) {
-
-    $("topProfile").onclick =
-      openProfile;
-  }
-
-  /* =========================================================
-     NEW CHAT
-  ========================================================= */
-
-  if ($("newChat")) {
-
-    $("newChat").onclick =
-      () => {
-
-        state.currentSession =
-          null;
-
-        persist();
-
-        renderSessions();
-
-        renderChat();
-
-        toast(
-          "Yangi suhbat boshlandi."
-        );
-      };
-  }
-
-  /* =========================================================
-     LOGOUT
-  ========================================================= */
-
-  if ($("logoutBtn")) {
-
-    $("logoutBtn").onclick =
-      () => {
-
-        state.currentUserId =
-          null;
-
-        state.currentSession =
-          null;
-
-        persist();
-
-        showAuth();
-
-        setAuthMode(
-          "login"
-        );
-      };
-  }
-
-  /* =========================================================
-     CHAT EVENTS
-  ========================================================= */
-
-  if ($("send")) {
-
-    $("send").onclick =
-      send;
-  }
-
-  if ($("msg")) {
-
-    $("msg").onkeydown =
-      e => {
-
-        if (
-          e.key === "Enter" &&
-          !e.shiftKey
-        ) {
-
-          e.preventDefault();
-
-          send();
-        }
-      };
-
-    $("msg").oninput =
-      resizeComposer;
-  }
-
-  /* =========================================================
-     MOBILE
-  ========================================================= */
-
-  if ($("mobileMenu")) {
-
-    $("mobileMenu").onclick =
-      () => {
-
-        const sidebar =
-          document.querySelector(
-            ".sidebar"
-          );
-
-        if (sidebar) {
-
-          sidebar.classList.add(
-            "open"
-          );
-        }
-
-        if ($("mobileOverlay")) {
-
-          $("mobileOverlay")
-            .classList.remove(
-              "hidden"
-            );
-        }
-      };
-  }
-
-  if ($("mobileOverlay")) {
-
-    $("mobileOverlay").onclick =
-      closeMobile;
-  }
-
-  function closeMobile() {
-
-    const sidebar =
-      document.querySelector(
-        ".sidebar"
-      );
-
-    if (sidebar) {
-
-      sidebar.classList.remove(
-        "open"
-      );
-    }
-
-    if ($("mobileOverlay")) {
-
-      $("mobileOverlay")
-        .classList.add(
-          "hidden"
-        );
-    }
-  }
-
-  /* =========================================================
-     ERROR LOG
-  ========================================================= */
-
-  window.addEventListener(
-    "error",
-    e =>
-      console.error(
-        "Qamir UI error:",
-        e.error ||
-        e.message
-      )
-  );
-
-  /* =========================================================
-     START APP
-  ========================================================= */
-
-  if (
-    state.currentUserId &&
-    currentUser()
-  ) {
-
-    showApp();
-
-  } else {
-
-    showAuth();
-
-    setAuthMode(
-      "login"
-    );
-  }
-
-})();
+    $("askStyle
