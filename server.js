@@ -647,6 +647,329 @@ function chooseKnowledgeAnswer(matches) {
 }
 
 // ============================================================
+// DATE / TIME - O'ZBEKISTON
+// ============================================================
+
+function getUzbekistanDateTime() {
+  const now = new Date();
+
+  const dateParts = new Intl.DateTimeFormat("uz-UZ", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now);
+
+  const timeParts = new Intl.DateTimeFormat("uz-UZ", {
+    timeZone: "Asia/Tashkent",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).formatToParts(now);
+
+  const weekday = new Intl.DateTimeFormat("uz-UZ", {
+    timeZone: "Asia/Tashkent",
+    weekday: "long"
+  }).format(now);
+
+  function part(parts, type) {
+    return parts.find(x => x.type === type)?.value || "";
+  }
+
+  return {
+    year: part(dateParts, "year"),
+    month: part(dateParts, "month"),
+    day: part(dateParts, "day"),
+    hour: part(timeParts, "hour"),
+    minute: part(timeParts, "minute"),
+    second: part(timeParts, "second"),
+    weekday
+  };
+}
+
+function getDateTimeAnswer(text) {
+  const q = normalize(text);
+
+  const datePatterns = [
+    "bugun nechi",
+    "bugun sana",
+    "bugungi sana",
+    "bugun nechanchi",
+    "sana nechi",
+    "bugun qaysi kun",
+    "bugun nima kun",
+    "bugun haftaning qaysi kuni",
+    "bugun nechanchi sana"
+  ];
+
+  const timePatterns = [
+    "soat nechi",
+    "hozir soat nechi",
+    "hozirgi vaqt",
+    "vaqt nechi",
+    "hozir nechi",
+    "hozir soat"
+  ];
+
+  const asksDate =
+    datePatterns.some(pattern =>
+      q.includes(pattern)
+    );
+
+  const asksTime =
+    timePatterns.some(pattern =>
+      q.includes(pattern)
+    );
+
+  if (!asksDate && !asksTime) {
+    return null;
+  }
+
+  const d =
+    getUzbekistanDateTime();
+
+  if (asksTime && !asksDate) {
+    return {
+      answer:
+        `Hozir O‘zbekiston vaqti bilan soat ${d.hour}:${d.minute}:${d.second}.`,
+      source: "date_time"
+    };
+  }
+
+  if (asksDate && asksTime) {
+    return {
+      answer:
+        `Bugun ${d.day}.${d.month}.${d.year}, ${d.weekday}. Hozir soat ${d.hour}:${d.minute}:${d.second}.`,
+      source: "date_time"
+    };
+  }
+
+  return {
+    answer:
+      `Bugun ${d.day}.${d.month}.${d.year}, ${d.weekday}.`,
+    source: "date_time"
+  };
+}
+
+// ============================================================
+// WIKIPEDIA
+// ============================================================
+
+function cleanWikipediaQuery(text) {
+  return String(text || "")
+    .trim()
+    .replace(/[?!.]+$/g, "")
+    .replace(
+      /\b(kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi)\b/gi,
+      " "
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeWikipediaQuestion(text) {
+  const q = normalize(text);
+
+  if (!q || q.length < 2) {
+    return false;
+  }
+
+  const keywords = [
+    "kim",
+    "kimdir",
+    "haqida",
+    "togrisida",
+    "biografiya",
+    "tarjimai holi",
+    "tarix",
+    "nima",
+    "qachon",
+    "qayerda",
+    "kim yaratgan",
+    "kim asos solgan",
+    "kim ixtiro qilgan"
+  ];
+
+  return keywords.some(word =>
+    q.includes(word)
+  );
+}
+
+async function fetchWikipediaFromLanguage(
+  language,
+  query
+) {
+  try {
+    const base =
+      `https://${language}.wikipedia.org`;
+
+    const searchUrl =
+      `${base}/w/rest.php/v1/search/page` +
+      `?q=${encodeURIComponent(query)}` +
+      `&limit=5`;
+
+    const searchResponse =
+      await fetch(searchUrl, {
+        headers: {
+          "Api-User-Agent":
+            "QamirAI/1.0 (Qamir AI personal assistant)"
+        }
+      });
+
+    if (!searchResponse.ok) {
+      return null;
+    }
+
+    const searchData =
+      await searchResponse.json();
+
+    const pages =
+      Array.isArray(searchData?.pages)
+        ? searchData.pages
+        : [];
+
+    if (!pages.length) {
+      return null;
+    }
+
+    const page =
+      pages[0];
+
+    const title =
+      page?.title ||
+      page?.key ||
+      query;
+
+    let description =
+      String(
+        page?.description ||
+        ""
+      ).trim();
+
+    const apiUrl =
+      `${base}/w/api.php` +
+      `?action=query` +
+      `&prop=extracts|info` +
+      `&exintro=1` +
+      `&explaintext=1` +
+      `&exchars=2200` +
+      `&inprop=url` +
+      `&redirects=1` +
+      `&format=json` +
+      `&origin=*` +
+      `&titles=${encodeURIComponent(title)}`;
+
+    const apiResponse =
+      await fetch(apiUrl, {
+        headers: {
+          "User-Agent":
+            "QamirAI/1.0 (Qamir AI personal assistant)"
+        }
+      });
+
+    let extract = "";
+    let fullUrl = "";
+
+    if (apiResponse.ok) {
+      const apiData =
+        await apiResponse.json();
+
+      const pagesObject =
+        apiData?.query?.pages || {};
+
+      const pageData =
+        Object.values(pagesObject)[0];
+
+      extract =
+        String(
+          pageData?.extract ||
+          ""
+        ).trim();
+
+      fullUrl =
+        String(
+          pageData?.fullurl ||
+          ""
+        ).trim();
+    }
+
+    const key =
+      String(
+        page?.key ||
+        title
+      ).replace(/ /g, "_");
+
+    if (!fullUrl) {
+      fullUrl =
+        `${base}/wiki/${encodeURIComponent(key)}`;
+    }
+
+    if (
+      !extract &&
+      !description
+    ) {
+      return null;
+    }
+
+    return {
+      language,
+      title,
+      description,
+      extract,
+      url: fullUrl
+    };
+  } catch (error) {
+    console.error(
+      `WIKIPEDIA ${language.toUpperCase()} ERROR:`,
+      error.message
+    );
+
+    return null;
+  }
+}
+
+async function searchWikipedia(userText) {
+  if (
+    !looksLikeWikipediaQuestion(
+      userText
+    )
+  ) {
+    return null;
+  }
+
+  const query =
+    cleanWikipediaQuery(
+      userText
+    );
+
+  if (
+    !query ||
+    query.length < 2
+  ) {
+    return null;
+  }
+
+  // First Uzbek Wikipedia.
+  let result =
+    await fetchWikipediaFromLanguage(
+      "uz",
+      query
+    );
+
+  // If not found, English Wikipedia.
+  if (!result) {
+    result =
+      await fetchWikipediaFromLanguage(
+        "en",
+        query
+      );
+  }
+
+  return result;
+}
+
+// ============================================================
 // ADVANCED CALCULATOR
 // ============================================================
 
@@ -708,7 +1031,6 @@ function normalizeMathQuestion(text) {
 function calculatePercentage(text) {
   const q = normalizeMathQuestion(text);
 
-  // 200 ning 15 foizi
   let m = q.match(
     /^(-?\d+(?:\.\d+)?)\s+ning\s+(-?\d+(?:\.\d+)?)\s*foiz(?:i|ini)?(?:\s+qancha)?$/
   );
@@ -725,7 +1047,6 @@ function calculatePercentage(text) {
     };
   }
 
-  // 15 foiz 200
   m = q.match(
     /^(-?\d+(?:\.\d+)?)\s*foiz(?:i|ini)?\s+(-?\d+(?:\.\d+)?)$/
   );
@@ -742,7 +1063,6 @@ function calculatePercentage(text) {
     };
   }
 
-  // 15% of 200
   m = q.match(
     /^(-?\d+(?:\.\d+)?)\s*%\s*(?:of|dan)\s*(-?\d+(?:\.\d+)?)$/
   );
@@ -759,7 +1079,6 @@ function calculatePercentage(text) {
     };
   }
 
-  // 15% of 200 with "hisobla"
   m = q.match(
     /(-?\d+(?:\.\d+)?)\s*%\s*(?:of|dan)\s*(-?\d+(?:\.\d+)?)/
   );
@@ -776,7 +1095,6 @@ function calculatePercentage(text) {
     };
   }
 
-  // 200 + 15%
   m = q.match(
     /^(-?\d+(?:\.\d+)?)\s*([+-])\s*(-?\d+(?:\.\d+)?)\s*%$/
   );
@@ -1069,16 +1387,6 @@ function evaluateAdvancedExpression(expression) {
     let value =
       parsePrimary();
 
-    while (
-      pos < tokens.length &&
-      tokens[pos].type === "!"
-    ) {
-      pos++;
-
-      value =
-        factorial(value);
-    }
-
     return ensureFinite(value);
   }
 
@@ -1128,6 +1436,7 @@ function evaluateAdvancedExpression(expression) {
             tokens[pos].type === ","
           ) {
             pos++;
+
             args.push(
               parseExpression()
             );
@@ -1667,7 +1976,6 @@ function definitePolynomialIntegral(text) {
   let upper =
     null;
 
-  // integral 0 dan 2 gacha x^2
   let match =
     q.match(
       /(?:integral|∫)\s*(-?\d+(?:\.\d+)?)\s*(?:dan|to|-)\s*(-?\d+(?:\.\d+)?)\s*(?:gacha)?\s+(.+)/
@@ -1684,7 +1992,6 @@ function definitePolynomialIntegral(text) {
       match[3];
   }
 
-  // integral x^2 dan 0 gacha 2
   if (
     lower === null ||
     upper === null
@@ -1860,7 +2167,6 @@ function tryCalculate(text) {
     return null;
   }
 
-  // 1. Foizlar
   const percentage =
     calculatePercentage(
       original
@@ -1876,7 +2182,6 @@ function tryCalculate(text) {
     };
   }
 
-  // 2. Tenglamalar
   const quadratic =
     solveQuadratic(
       original
@@ -1891,7 +2196,6 @@ function tryCalculate(text) {
     };
   }
 
-  // 3. Hosila
   const derivative =
     derivativePolynomial(
       original
@@ -1906,7 +2210,6 @@ function tryCalculate(text) {
     };
   }
 
-  // 4. Aniq integral
   const integral =
     definitePolynomialIntegral(
       original
@@ -1943,7 +2246,6 @@ function tryCalculate(text) {
       )
       .trim();
 
-  // √ belgisi
   expression =
     expression.replace(
       /√\s*([0-9.]+)/g,
@@ -1977,7 +2279,6 @@ function tryCalculate(text) {
     return null;
   }
 
-  // Ruxsat etilgan matematik belgilar va nomlar.
   if (
     !/^[0-9a-zA-Z_+\-*/%^().,\s√]+$/u.test(
       expression
@@ -2832,7 +3133,44 @@ app.post(
         [req.user.id]
       );
 
-      // 1. Calculator first.
+      // ========================================================
+      // 0. SANA / VAQT
+      // ========================================================
+
+      const dateTimeAnswer =
+        getDateTimeAnswer(text);
+
+      if (dateTimeAnswer) {
+        const saved =
+          await db(`
+            INSERT INTO messages
+              (user_id, sender, text)
+            VALUES
+              ($1, 'assistant', $2)
+            RETURNING
+              id, sender, text,
+              created_at
+          `, [
+            req.user.id,
+            dateTimeAnswer.answer
+          ]);
+
+        return res.json({
+          success: true,
+          answer:
+            dateTimeAnswer.answer,
+          source:
+            dateTimeAnswer.source,
+          matched_knowledge: [],
+          message:
+            saved[0]
+        });
+      }
+
+      // ========================================================
+      // 1. CALCULATOR
+      // ========================================================
+
       const calc =
         tryCalculate(text);
 
@@ -2853,8 +3191,10 @@ app.post(
 
         return res.json({
           success: true,
-          answer: calc.answer,
-          source: "calculator",
+          answer:
+            calc.answer,
+          source:
+            "calculator",
           matched_knowledge: [],
           calculation: {
             expression:
@@ -2867,7 +3207,10 @@ app.post(
         });
       }
 
-      // 2. Strict personal knowledge search.
+      // ========================================================
+      // 2. QAMIR BILIM BAZASI
+      // ========================================================
+
       const matches =
         await findKnowledge(
           text,
@@ -2880,7 +3223,8 @@ app.post(
         );
 
       let answer = null;
-      let source = "unknown";
+      let source =
+        "unknown";
 
       if (trusted) {
         answer =
@@ -2891,8 +3235,58 @@ app.post(
 
         source =
           "qamir_knowledge";
-      } else {
-        // Weak/unrelated knowledge is NOT sent.
+      }
+
+      // ========================================================
+      // 3. WIKIPEDIA
+      // ========================================================
+
+      if (!answer) {
+        try {
+          const wiki =
+            await searchWikipedia(
+              text
+            );
+
+          if (wiki) {
+            const wikiParts = [];
+
+            if (wiki.description) {
+              wikiParts.push(
+                wiki.description
+              );
+            }
+
+            if (wiki.extract) {
+              wikiParts.push(
+                wiki.extract
+              );
+            }
+
+            const wikiText =
+              wikiParts.join("\n\n").trim();
+
+            if (wikiText) {
+              answer =
+                `${wikiText}\n\nManba: Wikipedia (${wiki.language === "uz" ? "O‘zbekcha" : "English"})\n${wiki.url}`;
+
+              source =
+                "wikipedia";
+            }
+          }
+        } catch (e) {
+          console.error(
+            "WIKIPEDIA ERROR:",
+            e.message
+          );
+        }
+      }
+
+      // ========================================================
+      // 4. GEMINI
+      // ========================================================
+
+      if (!answer) {
         const usefulContext =
           matches
             .filter(
@@ -2919,6 +3313,10 @@ app.post(
           );
         }
       }
+
+      // ========================================================
+      // 5. NO ANSWER
+      // ========================================================
 
       if (!answer) {
         answer =
@@ -3184,8 +3582,6 @@ app.post(
 
 // ============================================================
 // STATIC FRONTEND
-// IMPORTANT:
-// Express 5 da app.get("*") ishlatilmaydi.
 // ============================================================
 
 app.use(
@@ -3223,6 +3619,14 @@ initDb()
 
         console.log(
           "Advanced calculator: enabled"
+        );
+
+        console.log(
+          "Uzbekistan date/time: enabled"
+        );
+
+        console.log(
+          "Wikipedia search: enabled"
         );
 
         console.log(
