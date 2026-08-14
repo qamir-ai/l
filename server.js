@@ -757,15 +757,21 @@ function getDateTimeAnswer(text) {
 // ============================================================
 
 function cleanWikipediaQuery(text) {
-  return String(text || "")
+  let q = String(text || "")
     .trim()
     .replace(/[?!.]+$/g, "")
     .replace(
-      /\b(kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi)\b/gi,
-      " "
+      /\s+(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi)\s*$/i,
+      ""
+    )
+    .replace(
+      /^(?:kim|kimdir)\s+/i,
+      ""
     )
     .replace(/\s+/g, " ")
     .trim();
+
+  return q;
 }
 
 function looksLikeWikipediaQuestion(text) {
@@ -775,139 +781,157 @@ function looksLikeWikipediaQuestion(text) {
     return false;
   }
 
-  const keywords = [
-    "kim",
-    "kimdir",
-    "haqida",
-    "togrisida",
-    "biografiya",
-    "tarjimai holi",
-    "tarix",
-    "nima",
-    "qachon",
-    "qayerda",
-    "kim yaratgan",
-    "kim asos solgan",
-    "kim ixtiro qilgan"
+  const patterns = [
+    " kim",
+    " kimdir",
+    " haqida",
+    " togri sida",
+    " togrisida",
+    " biografiya",
+    " tarjimai holi",
+    " kim yaratgan",
+    " kim asos solgan",
+    " kim ixtiro qilgan",
+    " qachon",
+    " qayerda"
   ];
 
-  return keywords.some(word =>
-    q.includes(word)
+  if (
+    q.startsWith("kim ") ||
+    q.endsWith(" kim") ||
+    q.endsWith(" kimdir")
+  ) {
+    return true;
+  }
+
+  return patterns.some(pattern =>
+    q.includes(pattern)
   );
 }
 
-async function fetchWikipediaFromLanguage(
-  language,
-  query
-) {
+function cleanWikipediaHtml(text) {
+  return String(text || "")
+    .replace(/<span[^>]*>/gi, "")
+    .replace(/<\/span>/gi, "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function fetchWikipediaFromLanguage(language, query) {
   try {
     const base =
       `https://${language}.wikipedia.org`;
 
-    const searchUrl =
+    const url =
       `${base}/w/rest.php/v1/search/page` +
       `?q=${encodeURIComponent(query)}` +
       `&limit=5`;
 
-    const searchResponse =
-      await fetch(searchUrl, {
-        headers: {
-          "Api-User-Agent":
-            "QamirAI/1.0 (Qamir AI personal assistant)"
-        }
-      });
+    console.log(
+      `Wikipedia qidiruvi [${language}]:`,
+      query
+    );
 
-    if (!searchResponse.ok) {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "User-Agent":
+          "QamirAI/1.0 (Qamir AI personal assistant)",
+        "Api-User-Agent":
+          "QamirAI/1.0 (Qamir AI personal assistant)"
+      }
+    });
+
+    if (!response.ok) {
+      console.error(
+        `Wikipedia ${language} HTTP:`,
+        response.status
+      );
+
       return null;
     }
 
-    const searchData =
-      await searchResponse.json();
+    const data =
+      await response.json();
 
     const pages =
-      Array.isArray(searchData?.pages)
-        ? searchData.pages
+      Array.isArray(data?.pages)
+        ? data.pages
         : [];
+
+    console.log(
+      `Wikipedia ${language} natijalari:`,
+      pages.length
+    );
 
     if (!pages.length) {
       return null;
     }
 
-    const page =
-      pages[0];
+    const normalizedQuery =
+      normalize(query);
+
+    let page =
+      pages.find(p =>
+        normalize(
+          p?.title ||
+          ""
+        ) === normalizedQuery
+      );
+
+    if (!page) {
+      page = pages[0];
+    }
+
+    if (!page) {
+      return null;
+    }
 
     const title =
-      page?.title ||
-      page?.key ||
-      query;
-
-    let description =
       String(
-        page?.description ||
-        ""
+        page.title ||
+        page.key ||
+        query
       ).trim();
 
-    const apiUrl =
-      `${base}/w/api.php` +
-      `?action=query` +
-      `&prop=extracts|info` +
-      `&exintro=1` +
-      `&explaintext=1` +
-      `&exchars=2200` +
-      `&inprop=url` +
-      `&redirects=1` +
-      `&format=json` +
-      `&origin=*` +
-      `&titles=${encodeURIComponent(title)}`;
+    const description =
+      cleanWikipediaHtml(
+        page.description ||
+        ""
+      );
 
-    const apiResponse =
-      await fetch(apiUrl, {
-        headers: {
-          "User-Agent":
-            "QamirAI/1.0 (Qamir AI personal assistant)"
-        }
-      });
-
-    let extract = "";
-    let fullUrl = "";
-
-    if (apiResponse.ok) {
-      const apiData =
-        await apiResponse.json();
-
-      const pagesObject =
-        apiData?.query?.pages || {};
-
-      const pageData =
-        Object.values(pagesObject)[0];
-
-      extract =
-        String(
-          pageData?.extract ||
-          ""
-        ).trim();
-
-      fullUrl =
-        String(
-          pageData?.fullurl ||
-          ""
-        ).trim();
-    }
+    const excerpt =
+      cleanWikipediaHtml(
+        page.excerpt ||
+        ""
+      );
 
     const key =
       String(
-        page?.key ||
+        page.key ||
         title
-      ).replace(/ /g, "_");
+      ).replace(
+        / /g,
+        "_"
+      );
 
-    if (!fullUrl) {
-      fullUrl =
-        `${base}/wiki/${encodeURIComponent(key)}`;
-    }
+    const wikiUrl =
+      `${base}/wiki/${encodeURIComponent(key)}`;
+
+    console.log(
+      `Wikipedia topildi [${language}]:`,
+      title
+    );
 
     if (
-      !extract &&
-      !description
+      !description &&
+      !excerpt
     ) {
       return null;
     }
@@ -916,9 +940,10 @@ async function fetchWikipediaFromLanguage(
       language,
       title,
       description,
-      extract,
-      url: fullUrl
+      extract: excerpt,
+      url: wikiUrl
     };
+
   } catch (error) {
     console.error(
       `WIKIPEDIA ${language.toUpperCase()} ERROR:`,
@@ -935,6 +960,10 @@ async function searchWikipedia(userText) {
       userText
     )
   ) {
+    console.log(
+      "Wikipedia: savol mos emas."
+    );
+
     return null;
   }
 
@@ -947,23 +976,36 @@ async function searchWikipedia(userText) {
     !query ||
     query.length < 2
   ) {
+    console.log(
+      "Wikipedia: query bo'sh."
+    );
+
     return null;
   }
 
-  // First Uzbek Wikipedia.
+  console.log(
+    "Wikipedia yakuniy query:",
+    query
+  );
+
   let result =
     await fetchWikipediaFromLanguage(
       "uz",
       query
     );
 
-  // If not found, English Wikipedia.
   if (!result) {
     result =
       await fetchWikipediaFromLanguage(
         "en",
         query
       );
+  }
+
+  if (!result) {
+    console.log(
+      "Wikipedia: natija topilmadi."
+    );
   }
 
   return result;
@@ -3243,41 +3285,56 @@ app.post(
 
       if (!answer) {
         try {
+          console.log(
+            "Wikipedia tekshirilmoqda:",
+            text
+          );
+
           const wiki =
             await searchWikipedia(
               text
             );
 
           if (wiki) {
-            const wikiParts = [];
+            const parts = [];
 
             if (wiki.description) {
-              wikiParts.push(
+              parts.push(
                 wiki.description
               );
             }
 
             if (wiki.extract) {
-              wikiParts.push(
+              parts.push(
                 wiki.extract
               );
             }
 
             const wikiText =
-              wikiParts.join("\n\n").trim();
+              parts
+                .join("\n\n")
+                .trim();
 
             if (wikiText) {
               answer =
-                `${wikiText}\n\nManba: Wikipedia (${wiki.language === "uz" ? "O‘zbekcha" : "English"})\n${wiki.url}`;
+                `${wiki.title}\n\n` +
+                `${wikiText}\n\n` +
+                `Manba: Wikipedia (${wiki.language === "uz" ? "O‘zbekcha" : "English"})\n` +
+                `${wiki.url}`;
 
               source =
                 "wikipedia";
+
+              console.log(
+                "Wikipedia javobi tayyor:",
+                wiki.title
+              );
             }
           }
         } catch (e) {
           console.error(
             "WIKIPEDIA ERROR:",
-            e.message
+            e
           );
         }
       }
@@ -3582,6 +3639,8 @@ app.post(
 
 // ============================================================
 // STATIC FRONTEND
+// IMPORTANT:
+// Express 5 da app.get("*") ishlatilmaydi.
 // ============================================================
 
 app.use(
