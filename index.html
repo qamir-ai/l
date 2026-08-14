@@ -1,1166 +1,978 @@
 <!doctype html>
 <html lang="uz">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Qamir AI</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background: #0b0811;
-      color: #f0e8ff;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    /* ===== AUTH ===== */
-    #authView {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      background: radial-gradient(ellipse at 50% 30%, #1f1533, #0b0811 70%);
-    }
-
-    .auth-container {
-      width: 100%;
-      max-width: 400px;
-      padding: 20px;
-    }
-
-    .auth-box {
-      background: #14101e;
-      border: 1px solid #2d2340;
-      border-radius: 24px;
-      padding: 40px 32px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
-    }
-
-    .auth-logo {
-      text-align: center;
-      margin-bottom: 28px;
-    }
-
-    .auth-logo h1 {
-      font-size: 32px;
-      background: linear-gradient(135deg, #a78bfa, #7c3aed);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .auth-logo p {
-      color: #6a5e7e;
-      font-size: 13px;
-    }
-
-    .auth-box h2 {
-      text-align: center;
-      font-size: 22px;
-      font-weight: 600;
-      color: #f0e8ff;
-      margin-bottom: 6px;
-    }
-
-    .auth-box .auth-hint {
-      text-align: center;
-      color: #8a7f9e;
-      font-size: 14px;
-      margin-bottom: 24px;
-    }
-
-    .auth-group {
-      margin-bottom: 14px;
-    }
-
-    .auth-group label {
-      display: block;
-      font-size: 12px;
-      font-weight: 500;
-      color: #b8aed0;
-      margin-bottom: 4px;
-    }
-
-    .auth-group input {
-      width: 100%;
-      padding: 12px 16px;
-      background: #1e172b;
-      border: 1px solid #2d2340;
-      border-radius: 12px;
-      color: #f0e8ff;
-      font-size: 15px;
-      outline: none;
-      transition: border 0.2s;
-    }
-
-    .auth-group input:focus {
-      border-color: #7c3aed;
-      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
-    }
-
-    .auth-group.hidden {
-      display: none;
-    }
-
-    .auth-error {
-      color: #f87171;
-      font-size: 13px;
-      min-height: 20px;
-      text-align: center;
-      margin: 8px 0;
-    }
-
-    .auth-box button[type="submit"] {
-      width: 100%;
-      padding: 13px;
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
-      border: none;
-      border-radius: 12px;
-      color: #fff;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.2s;
-    }
-
-    .auth-box button[type="submit"]:hover {
-      opacity: 0.85;
-    }
-
-    .auth-switch {
-      text-align: center;
-      margin-top: 16px;
-    }
-
-    .auth-switch button {
-      background: none;
-      border: none;
-      color: #a78bfa;
-      font-size: 14px;
-      cursor: pointer;
-      text-decoration: underline;
-    }
-
-    .auth-switch button:hover {
-      color: #c4b5fd;
-    }
-
-    .auth-footer {
-      text-align: center;
-      margin-top: 20px;
-      font-size: 11px;
-      color: #4a4058;
-      border-top: 1px solid #1e172b;
-      padding-top: 16px;
-    }
-
-    /* ===== APP ===== */
-    #appView {
-      display: flex;
-      height: 100vh;
-    }
-
-    #appView.hidden {
-      display: none;
-    }
-
-    /* ===== SIDEBAR ===== */
-    .sidebar {
-      width: 260px;
-      background: #100d18;
-      border-right: 1px solid #201a2b;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      flex-shrink: 0;
-    }
-
-    .sidebar-header {
-      padding: 16px 18px 12px;
-      border-bottom: 1px solid #1e172b;
-    }
-
-    .sidebar-header .brand {
-      font-size: 20px;
-      font-weight: 700;
-      background: linear-gradient(135deg, #a78bfa, #7c3aed);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .sidebar-actions {
-      padding: 10px 14px;
-      border-bottom: 1px solid #1e172b;
-    }
-
-    .sidebar-actions button {
-      width: 100%;
-      padding: 10px;
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
-      border: none;
-      border-radius: 10px;
-      color: #fff;
-      font-weight: 600;
-      cursor: pointer;
-      font-size: 14px;
-    }
-
-    .sidebar-actions button:hover {
-      opacity: 0.85;
-    }
-
-    .sidebar-title {
-      padding: 12px 18px 6px;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #4a4058;
-      font-weight: 600;
-    }
-
-    .chat-list {
-      flex: 1;
-      overflow-y: auto;
-      padding: 4px 10px 10px;
-    }
-
-    .chat-item {
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-size: 14px;
-      color: #c8c0d8;
-      cursor: pointer;
-      transition: background 0.15s;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .chat-item:hover {
-      background: #1e172b;
-    }
-
-    .chat-item.active {
-      background: #2d2340;
-      color: #f0e8ff;
-      font-weight: 500;
-    }
-
-    .sidebar-footer {
-      padding: 12px 16px;
-      border-top: 1px solid #1e172b;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .sidebar-footer .avatar {
-      width: 34px;
-      height: 34px;
-      border-radius: 50%;
-      background: #2d2340;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      color: #a78bfa;
-      overflow: hidden;
-      flex-shrink: 0;
-    }
-
-    .sidebar-footer .avatar img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .sidebar-footer .user-info {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .sidebar-footer .user-name {
-      font-size: 14px;
-      font-weight: 500;
-      color: #f0e8ff;
-    }
-
-    .sidebar-footer .user-status {
-      font-size: 11px;
-      color: #6a5e7e;
-    }
-
-    .sidebar-footer .user-status.admin {
-      color: #a78bfa;
-    }
-
-    .sidebar-footer .menu-btn {
-      background: none;
-      border: none;
-      color: #6a5e7e;
-      font-size: 18px;
-      cursor: pointer;
-      padding: 4px 6px;
-      border-radius: 6px;
-      transition: background 0.2s;
-    }
-
-    .sidebar-footer .menu-btn:hover {
-      background: #1e172b;
-      color: #d0c8e0;
-    }
-
-    .admin-only {
-      display: none;
-    }
-
-    .is-admin .admin-only {
-      display: flex;
-    }
-
-    /* ===== MAIN ===== */
-    .main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      background: #0f0c16;
-      min-width: 0;
-    }
-
-    .main-header {
-      padding: 12px 20px;
-      border-bottom: 1px solid #1a1425;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-shrink: 0;
-    }
-
-    .main-header .mobile-menu {
-      display: none;
-      background: none;
-      border: none;
-      color: #a78bfa;
-      font-size: 24px;
-      cursor: pointer;
-    }
-
-    .main-header .chat-title {
-      font-size: 16px;
-      font-weight: 500;
-      color: #f0e8ff;
-    }
-
-    .main-header .spacer {
-      flex: 1;
-    }
-
-    .main-header .header-actions button {
-      background: none;
-      border: none;
-      color: #6a5e7e;
-      font-size: 18px;
-      cursor: pointer;
-      padding: 4px 8px;
-      border-radius: 6px;
-      transition: background 0.2s;
-    }
-
-    .main-header .header-actions button:hover {
-      background: #1e172b;
-      color: #d0c8e0;
-    }
-
-    /* ===== CHAT ===== */
-    .chat-container {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px 24px 8px;
-    }
-
-    .empty-chat {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      text-align: center;
-    }
-
-    .hero {
-      max-width: 460px;
-    }
-
-    .hero h1 {
-      font-size: 32px;
-      font-weight: 600;
-      color: #f0e8ff;
-    }
-
-    .hero h1 span {
-      background: linear-gradient(135deg, #a78bfa, #7c3aed);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .hero p {
-      color: #8a7f9e;
-      font-size: 16px;
-      margin-top: 10px;
-      line-height: 1.6;
-    }
-
-    /* ===== MESSAGES ===== */
-    .message-row {
-      display: flex;
-      margin-bottom: 14px;
-    }
-
-    .message-row.user {
-      justify-content: flex-end;
-    }
-
-    .message-row.assistant {
-      justify-content: flex-start;
-    }
-
-    .message {
-      max-width: 78%;
-    }
-
-    .message .bubble {
-      padding: 12px 16px;
-      border-radius: 16px;
-      font-size: 14px;
-      line-height: 1.6;
-      word-wrap: break-word;
-    }
-
-    .message-row.user .bubble {
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
-      color: #fff;
-      border-bottom-right-radius: 4px;
-    }
-
-    .message-row.assistant .bubble {
-      background: #1a1425;
-      border: 1px solid #2d2340;
-      color: #e8e0f0;
-      border-bottom-left-radius: 4px;
-    }
-
-    .msg-time {
-      font-size: 10px;
-      color: #4a4058;
-      margin-top: 4px;
-      padding: 0 6px;
-    }
-
-    .message-row.user .msg-time {
-      text-align: right;
-    }
-
-    /* ===== TYPING ===== */
-    .typing .bubble {
-      display: flex;
-      gap: 5px;
-      padding: 14px 20px;
-      align-items: center;
-    }
-
-    .typing .dot {
-      width: 8px;
-      height: 8px;
-      background: #6a5e7e;
-      border-radius: 50%;
-      animation: dotBounce 1.2s infinite;
-    }
-
-    .typing .dot:nth-child(2) {
-      animation-delay: 0.2s;
-    }
-    .typing .dot:nth-child(3) {
-      animation-delay: 0.4s;
-    }
-
-    @keyframes dotBounce {
-      0%,
-      60%,
-      100% {
-        transform: translateY(0);
-        opacity: 0.3;
-      }
-      30% {
-        transform: translateY(-6px);
-        opacity: 1;
-      }
-    }
-
-    /* ===== COMPOSER ===== */
-    .composer {
-      padding: 10px 20px 14px;
-      border-top: 1px solid #1a1425;
-      display: flex;
-      gap: 10px;
-      align-items: flex-end;
-      flex-shrink: 0;
-      background: #0f0c16;
-    }
-
-    .composer textarea {
-      flex: 1;
-      padding: 10px 16px;
-      background: #1a1425;
-      border: 1px solid #2d2340;
-      border-radius: 14px;
-      color: #f0e8ff;
-      font-size: 14px;
-      resize: none;
-      outline: none;
-      font-family: inherit;
-      min-height: 42px;
-      max-height: 120px;
-      line-height: 1.5;
-      transition: border 0.2s;
-    }
-
-    .composer textarea:focus {
-      border-color: #7c3aed;
-      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-    }
-
-    .composer textarea::placeholder {
-      color: #4a4058;
-    }
-
-    .composer button {
-      padding: 10px 18px;
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
-      border: none;
-      border-radius: 14px;
-      color: #fff;
-      font-size: 18px;
-      cursor: pointer;
-      transition: opacity 0.2s;
-      height: 42px;
-      min-width: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .composer button:hover {
-      opacity: 0.85;
-    }
-    .composer button:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-
-    /* ===== TOAST ===== */
-    #toast {
-      position: fixed;
-      bottom: 30px;
-      left: 50%;
-      transform: translateX(-50%) translateY(80px);
-      background: #1e172b;
-      border: 1px solid #2d2340;
-      color: #f0e8ff;
-      padding: 12px 24px;
-      border-radius: 14px;
-      font-size: 14px;
-      opacity: 0;
-      transition: opacity 0.3s, transform 0.3s;
-      pointer-events: none;
-      z-index: 9999;
-    }
-
-    #toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-
-    /* ===== MODAL ===== */
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.7);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-
-    .modal-overlay.hidden {
-      display: none;
-    }
-
-    .modal {
-      background: #14101e;
-      border: 1px solid #2d2340;
-      border-radius: 20px;
-      padding: 28px;
-      max-width: 420px;
-      width: 90%;
-      max-height: 90vh;
-      overflow-y: auto;
-    }
-
-    .modal h2 {
-      color: #f0e8ff;
-      font-size: 20px;
-      margin-bottom: 16px;
-    }
-
-    .modal .form-group {
-      margin-bottom: 12px;
-    }
-
-    .modal .form-group label {
-      display: block;
-      font-size: 12px;
-      color: #b8aed0;
-      margin-bottom: 3px;
-    }
-
-    .modal .form-group input,
-    .modal .form-group textarea {
-      width: 100%;
-      padding: 10px 14px;
-      background: #1e172b;
-      border: 1px solid #2d2340;
-      border-radius: 10px;
-      color: #f0e8ff;
-      font-size: 14px;
-      outline: none;
-      font-family: inherit;
-    }
-
-    .modal .form-group input:focus,
-    .modal .form-group textarea:focus {
-      border-color: #7c3aed;
-    }
-
-    .modal .form-group textarea {
-      min-height: 70px;
-      resize: vertical;
-    }
-
-    .modal .modal-actions {
-      display: flex;
-      gap: 10px;
-      margin-top: 16px;
-    }
-
-    .modal .modal-actions button {
-      padding: 10px 20px;
-      border: none;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      flex: 1;
-      transition: opacity 0.2s;
-    }
-
-    .modal .modal-actions .btn-primary {
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
-      color: #fff;
-    }
-
-    .modal .modal-actions .btn-secondary {
-      background: #1e172b;
-      color: #b8aed0;
-      border: 1px solid #2d2340;
-    }
-
-    .modal .modal-actions button:hover {
-      opacity: 0.8;
-    }
-
-    .modal .error-text {
-      color: #f87171;
-      font-size: 12px;
-      margin-top: 6px;
-    }
-
-    .modal .avatar-upload {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-
-    .modal .avatar-upload img {
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 2px solid #2d2340;
-    }
-
-    .modal .avatar-upload input[type="file"] {
-      padding: 6px;
-      font-size: 12px;
-      background: #1e172b;
-      border: 1px solid #2d2340;
-      border-radius: 8px;
-      color: #b8aed0;
-    }
-
-    /* ===== RESPONSIVE ===== */
-    @media (max-width: 768px) {
-      .sidebar {
-        position: fixed;
-        left: -280px;
-        top: 0;
-        bottom: 0;
-        width: 260px;
-        z-index: 100;
-        transition: left 0.3s;
-        border-right: 1px solid #2d2340;
-      }
-
-      .sidebar.open {
-        left: 0;
-      }
-
-      .main-header .mobile-menu {
-        display: block;
-      }
-
-      .chat-container {
-        padding: 14px 14px 4px;
-      }
-
-      .composer {
-        padding: 8px 12px 12px;
-      }
-
-      .auth-box {
-        padding: 28px 20px;
-      }
-
-      .modal {
-        padding: 20px;
-      }
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    /* Knowledge list */
-    .knowledge-card {
-      border: 1px solid #2d2340;
-      border-radius: 10px;
-      padding: 12px;
-      background: #1a1425;
-      margin-bottom: 8px;
-    }
-
-    .knowledge-card .knowledge-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    .knowledge-card .knowledge-head strong {
-      font-size: 13px;
-    }
-
-    .knowledge-card .knowledge-type {
-      font-size: 10px;
-      color: #a78bfa;
-      background: rgba(124, 58, 237, 0.15);
-      padding: 2px 10px;
-      border-radius: 20px;
-    }
-
-    .knowledge-card p {
-      color: #a69cad;
-      font-size: 12px;
-      line-height: 1.5;
-      margin: 8px 0;
-      white-space: pre-wrap;
-    }
-
-    .knowledge-card .delete-k {
-      border: none;
-      background: rgba(255, 60, 100, 0.1);
-      color: #ff8ca4;
-      border-radius: 6px;
-      padding: 4px 10px;
-      font-size: 11px;
-      cursor: pointer;
-    }
-
-    .knowledge-add {
-      background: #1a1425;
-      border: 1px solid #2d2340;
-      padding: 14px;
-      border-radius: 12px;
-      margin-bottom: 12px;
-    }
-
-    .knowledge-add select {
-      width: 100%;
-      padding: 10px 14px;
-      background: #1e172b;
-      border: 1px solid #2d2340;
-      border-radius: 10px;
-      color: #f0e8ff;
-      font-size: 14px;
-      outline: none;
-      margin-bottom: 8px;
-    }
-
-    .section-note {
-      color: #8a7f9e;
-      font-size: 12px;
-      padding: 10px 14px;
-      background: #1a1425;
-      border: 1px solid #2d2340;
-      border-radius: 10px;
-      margin-bottom: 12px;
-    }
-
-    .settings-tabs {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      border-bottom: 1px solid #2d2340;
-      padding-bottom: 10px;
-      margin-bottom: 14px;
-    }
-
-    .settings-tabs .tab {
-      padding: 6px 14px;
-      border: none;
-      background: none;
-      color: #8a7f9e;
-      font-size: 12px;
-      cursor: pointer;
-      border-radius: 20px;
-      transition: all 0.2s;
-    }
-
-    .settings-tabs .tab.active {
-      background: rgba(124, 58, 237, 0.2);
-      color: #a78bfa;
-    }
-
-    .tab-panel {
-      display: none;
-    }
-
-    .tab-panel.active {
-      display: block;
-    }
-
-    .two-col {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0 12px;
-    }
-
-    @media (max-width: 500px) {
-      .two-col {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .improve-stats {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin: 10px 0;
-    }
-
-    .improve-stats div {
-      border: 1px solid #2d2340;
-      border-radius: 10px;
-      padding: 12px;
-      text-align: center;
-    }
-
-    .improve-stats b {
-      display: block;
-      font-size: 20px;
-      color: #a78bfa;
-    }
-
-    .improve-stats span {
-      color: #8a7f9e;
-      font-size: 10px;
-    }
-
-    .suggestions {
-      margin-top: 10px;
-    }
-
-    .suggestion {
-      padding: 10px 14px;
-      border: 1px solid rgba(124, 58, 237, 0.2);
-      border-radius: 10px;
-      background: rgba(124, 58, 237, 0.05);
-      margin-bottom: 6px;
-      font-size: 12px;
-      color: #c8c0d8;
-    }
-
-    .suggestion button {
-      margin-top: 6px;
-      border: none;
-      padding: 4px 12px;
-      border-radius: 6px;
-      font-size: 11px;
-      cursor: pointer;
-    }
-
-    .suggestion button[data-approve] {
-      background: #7c3aed;
-      color: #fff;
-    }
-
-    .suggestion button[data-reject] {
-      background: #2d2340;
-      color: #b8aed0;
-    }
-
-    .api-status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: #8a7f9e;
-      font-size: 12px;
-      margin-top: 10px;
-    }
-
-    .api-status .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #4a4058;
-    }
-
-    .api-status.ok .dot {
-      background: #3ee47b;
-      box-shadow: 0 0 10px rgba(62, 228, 123, 0.3);
-    }
-
-    .warning-box {
-      background: rgba(124, 58, 237, 0.08);
-      border: 1px solid rgba(124, 58, 237, 0.2);
-      border-radius: 10px;
-      padding: 10px 14px;
-      font-size: 11px;
-      color: #b8aed0;
-      line-height: 1.5;
-      margin-bottom: 12px;
-    }
-
-    .profile-photo {
-      text-align: center;
-      margin-bottom: 14px;
-    }
-
-    .profile-photo img {
-      width: 80px;
-      height: 80px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 2px solid #7c3aed;
-      padding: 2px;
-    }
-
-    .upload-btn {
-      display: inline-block !important;
-      padding: 4px 12px;
-      border: 1px solid #2d2340;
-      border-radius: 8px;
-      background: #1a1425;
-      color: #b8aed0;
-      font-size: 12px;
-      cursor: pointer !important;
-      margin-top: 6px;
-    }
-
-    .upload-btn input {
-      display: none;
-    }
-
-    #mobileOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 50;
-      display: none;
-    }
-
-    #mobileOverlay:not(.hidden) {
-      display: block;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qamir AI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0b0811;
+            color: #f0e8ff;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .hidden {
+            display: none !important;
+        }
+
+        /* AUTH */
+        #authView {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: radial-gradient(ellipse at 50% 30%, #1f1533, #0b0811 70%);
+        }
+        .auth-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 20px;
+        }
+        .auth-box {
+            background: #14101e;
+            border: 1px solid #2d2340;
+            border-radius: 24px;
+            padding: 40px 32px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+        }
+        .auth-logo {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+        .auth-logo h1 {
+            font-size: 32px;
+            background: linear-gradient(135deg, #a78bfa, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .auth-logo p {
+            color: #6a5e7e;
+            font-size: 13px;
+        }
+        .auth-box h2 {
+            text-align: center;
+            font-size: 22px;
+            margin-bottom: 6px;
+        }
+        .auth-box .auth-hint {
+            text-align: center;
+            color: #8a7f9e;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        .auth-group {
+            margin-bottom: 14px;
+        }
+        .auth-group label {
+            display: block;
+            font-size: 12px;
+            color: #b8aed0;
+            margin-bottom: 4px;
+        }
+        .auth-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background: #1e172b;
+            border: 1px solid #2d2340;
+            border-radius: 12px;
+            color: #f0e8ff;
+            font-size: 15px;
+            outline: none;
+        }
+        .auth-group input:focus {
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+        }
+        .auth-group.hidden {
+            display: none;
+        }
+        .auth-error {
+            color: #f87171;
+            font-size: 13px;
+            min-height: 20px;
+            text-align: center;
+            margin: 8px 0;
+        }
+        .auth-box button[type="submit"] {
+            width: 100%;
+            padding: 13px;
+            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+            border: none;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .auth-box button[type="submit"]:hover {
+            opacity: 0.85;
+        }
+        .auth-switch {
+            text-align: center;
+            margin-top: 16px;
+        }
+        .auth-switch button {
+            background: none;
+            border: none;
+            color: #a78bfa;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .auth-switch button:hover {
+            color: #c4b5fd;
+        }
+        .auth-footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 11px;
+            color: #4a4058;
+            border-top: 1px solid #1e172b;
+            padding-top: 16px;
+        }
+
+        /* APP */
+        #appView {
+            display: flex;
+            height: 100vh;
+        }
+        #appView.hidden {
+            display: none;
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            width: 250px;
+            background: #100d18;
+            border-right: 1px solid #201a2b;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            flex-shrink: 0;
+        }
+        .sidebar-header {
+            padding: 16px 18px;
+            border-bottom: 1px solid #1e172b;
+        }
+        .sidebar-header .brand {
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a78bfa, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .sidebar-actions {
+            padding: 10px 14px;
+            border-bottom: 1px solid #1e172b;
+        }
+        .sidebar-actions button {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .sidebar-title {
+            padding: 12px 18px 6px;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #4a4058;
+            font-weight: 600;
+        }
+        .chat-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 10px;
+        }
+        .chat-item {
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #c8c0d8;
+            cursor: pointer;
+        }
+        .chat-item:hover {
+            background: #1e172b;
+        }
+        .chat-item.active {
+            background: #2d2340;
+            color: #f0e8ff;
+        }
+        .sidebar-footer {
+            padding: 12px 16px;
+            border-top: 1px solid #1e172b;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .sidebar-footer .avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: #2d2340;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: #a78bfa;
+        }
+        .sidebar-footer .user-info {
+            flex: 1;
+        }
+        .sidebar-footer .user-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #f0e8ff;
+        }
+        .sidebar-footer .user-status {
+            font-size: 11px;
+            color: #6a5e7e;
+        }
+        .sidebar-footer .menu-btn {
+            background: none;
+            border: none;
+            color: #6a5e7e;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .sidebar-footer .menu-btn:hover {
+            color: #d0c8e0;
+        }
+        .admin-only {
+            display: none;
+        }
+        .is-admin .admin-only {
+            display: inline-block;
+        }
+
+        /* MAIN */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #0f0c16;
+        }
+        .main-header {
+            padding: 12px 20px;
+            border-bottom: 1px solid #1a1425;
+            display: flex;
+            align-items: center;
+        }
+        .main-header .chat-title {
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .main-header .spacer {
+            flex: 1;
+        }
+        .main-header button {
+            background: none;
+            border: none;
+            color: #6a5e7e;
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        /* CHAT */
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+        }
+        .empty-chat {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+        }
+        .hero h1 {
+            font-size: 30px;
+        }
+        .hero h1 span {
+            background: linear-gradient(135deg, #a78bfa, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero p {
+            color: #8a7f9e;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        .message-row {
+            display: flex;
+            margin-bottom: 14px;
+        }
+        .message-row.user {
+            justify-content: flex-end;
+        }
+        .message {
+            max-width: 78%;
+        }
+        .message .bubble {
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.6;
+            word-wrap: break-word;
+        }
+        .message-row.user .bubble {
+            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .message-row.assistant .bubble {
+            background: #1a1425;
+            border: 1px solid #2d2340;
+            color: #e8e0f0;
+            border-bottom-left-radius: 4px;
+        }
+        .msg-time {
+            font-size: 10px;
+            color: #4a4058;
+            margin-top: 4px;
+        }
+        .message-row.user .msg-time {
+            text-align: right;
+        }
+
+        /* TYPING */
+        .typing .bubble {
+            display: flex;
+            gap: 5px;
+            padding: 14px 20px;
+        }
+        .typing .dot {
+            width: 8px;
+            height: 8px;
+            background: #6a5e7e;
+            border-radius: 50%;
+            animation: dotBounce 1.2s infinite;
+        }
+        .typing .dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .typing .dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes dotBounce {
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+                opacity: 0.3;
+            }
+            30% {
+                transform: translateY(-6px);
+                opacity: 1;
+            }
+        }
+
+        /* COMPOSER */
+        .composer {
+            padding: 10px 20px 14px;
+            border-top: 1px solid #1a1425;
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            background: #0f0c16;
+        }
+        .composer textarea {
+            flex: 1;
+            padding: 10px 16px;
+            background: #1a1425;
+            border: 1px solid #2d2340;
+            border-radius: 14px;
+            color: #f0e8ff;
+            font-size: 14px;
+            resize: none;
+            outline: none;
+            font-family: inherit;
+            min-height: 42px;
+            max-height: 120px;
+            line-height: 1.5;
+        }
+        .composer textarea:focus {
+            border-color: #7c3aed;
+        }
+        .composer button {
+            padding: 10px 18px;
+            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+            border: none;
+            border-radius: 14px;
+            color: #fff;
+            font-size: 18px;
+            cursor: pointer;
+            height: 42px;
+            min-width: 48px;
+        }
+
+        /* TOAST */
+        #toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #1e172b;
+            border: 1px solid #2d2340;
+            color: #f0e8ff;
+            padding: 12px 24px;
+            border-radius: 14px;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            pointer-events: none;
+            z-index: 9999;
+        }
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* MODAL */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-overlay.hidden {
+            display: none;
+        }
+        .modal {
+            background: #14101e;
+            border: 1px solid #2d2340;
+            border-radius: 20px;
+            padding: 28px;
+            max-width: 420px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal h2 {
+            color: #f0e8ff;
+            font-size: 20px;
+            margin-bottom: 16px;
+        }
+        .modal .form-group {
+            margin-bottom: 12px;
+        }
+        .modal .form-group label {
+            display: block;
+            font-size: 12px;
+            color: #b8aed0;
+            margin-bottom: 3px;
+        }
+        .modal .form-group input,
+        .modal .form-group textarea {
+            width: 100%;
+            padding: 10px 14px;
+            background: #1e172b;
+            border: 1px solid #2d2340;
+            border-radius: 10px;
+            color: #f0e8ff;
+            font-size: 14px;
+            outline: none;
+            font-family: inherit;
+        }
+        .modal .form-group input:focus,
+        .modal .form-group textarea:focus {
+            border-color: #7c3aed;
+        }
+        .modal .form-group textarea {
+            min-height: 70px;
+            resize: vertical;
+        }
+        .modal .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .modal .modal-actions button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            flex: 1;
+        }
+        .modal .modal-actions .btn-primary {
+            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+            color: #fff;
+        }
+        .modal .modal-actions .btn-secondary {
+            background: #1e172b;
+            color: #b8aed0;
+            border: 1px solid #2d2340;
+        }
+        .modal .error-text {
+            color: #f87171;
+            font-size: 12px;
+            margin-top: 6px;
+        }
+        .modal .avatar-upload {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .modal .avatar-upload img {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #2d2340;
+        }
+        .modal .avatar-upload input[type="file"] {
+            padding: 6px;
+            font-size: 12px;
+            background: #1e172b;
+            border: 1px solid #2d2340;
+            border-radius: 8px;
+            color: #b8aed0;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -270px;
+                top: 0;
+                bottom: 0;
+                width: 250px;
+                z-index: 100;
+                transition: left 0.3s;
+            }
+            .sidebar.open {
+                left: 0;
+            }
+            .auth-box {
+                padding: 28px 20px;
+            }
+        }
+    </style>
 </head>
 <body>
 
-  <!-- ===== TOAST ===== -->
-  <div id="toast"></div>
+    <div id="toast"></div>
 
-  <!-- ===== AUTH VIEW ===== -->
-  <div id="authView">
-    <div class="auth-container">
-      <div class="auth-box">
-        <div class="auth-logo">
-          <h1>✦ Qamir AI</h1>
-          <p>Intellektual yordamchi</p>
+    <!-- AUTH -->
+    <div id="authView">
+        <div class="auth-container">
+            <div class="auth-box">
+                <div class="auth-logo">
+                    <h1>✦ Qamir AI</h1>
+                    <p>Intellektual yordamchi</p>
+                </div>
+                <h2 id="authTitle">Xush kelibsiz</h2>
+                <p class="auth-hint" id="authHint">Hisobingizga kiring va suhbatni boshlang.</p>
+
+                <form id="authForm">
+                    <div class="auth-group">
+                        <label>Login</label>
+                        <input type="text" id="authUsername" placeholder="Loginingizni kiriting" required>
+                    </div>
+                    <div class="auth-group">
+                        <label>Parol</label>
+                        <input type="password" id="authPassword" placeholder="Parolingizni kiriting" required>
+                    </div>
+                    <div class="auth-group hidden" id="emailField">
+                        <label>Email (ixtiyoriy)</label>
+                        <input type="email" id="authEmail" placeholder="Email manzilingiz">
+                    </div>
+                    <div class="auth-group hidden" id="confirmField">
+                        <label>Parolni tasdiqlang</label>
+                        <input type="password" id="authConfirm" placeholder="Parolni qayta kiriting">
+                    </div>
+                    <div id="authError" class="auth-error"></div>
+                    <button type="submit"><span id="authSubmitText">Kirish</span></button>
+                </form>
+
+                <div class="auth-switch">
+                    <button id="authSwitch" type="button">Hisobingiz yo‘qmi? Ro‘yxatdan o‘ting</button>
+                </div>
+                <div class="auth-footer">Qamir AI — siz bergan bilimlar va AI texnologiyasi asosida ishlaydi.</div>
+            </div>
         </div>
-        <h2 id="authTitle">Xush kelibsiz</h2>
-        <p class="auth-hint" id="authHint">Hisobingizga kiring va suhbatni boshlang.</p>
-
-        <form id="authForm">
-          <div class="auth-group">
-            <label>Login</label>
-            <input type="text" id="authUsername" placeholder="Loginingizni kiriting" required>
-          </div>
-          <div class="auth-group">
-            <label>Parol</label>
-            <input type="password" id="authPassword" placeholder="Parolingizni kiriting" required>
-          </div>
-          <div class="auth-group hidden" id="emailField">
-            <label>Email (ixtiyoriy)</label>
-            <input type="email" id="authEmail" placeholder="Email manzilingiz">
-          </div>
-          <div class="auth-group hidden" id="confirmField">
-            <label>Parolni tasdiqlang</label>
-            <input type="password" id="authConfirm" placeholder="Parolni qayta kiriting">
-          </div>
-          <div id="authError" class="auth-error"></div>
-          <button type="submit"><span id="authSubmitText">Kirish</span></button>
-        </form>
-
-        <div class="auth-switch">
-          <button id="authSwitch" type="button">Hisobingiz yo‘qmi? Ro‘yxatdan o‘ting</button>
-        </div>
-        <div class="auth-footer">Qamir AI — siz bergan bilimlar va AI texnologiyasi asosida ishlaydi.</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== APP VIEW ===== -->
-  <div id="appView" class="hidden">
-    <div id="mobileOverlay" class="hidden"></div>
-
-    <!-- SIDEBAR -->
-    <div class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <span class="brand">✦ Qamir AI</span>
-      </div>
-      <div class="sidebar-actions">
-        <button id="newChat">+ Yangi suhbat</button>
-      </div>
-      <div class="sidebar-title">Suhbatlar</div>
-      <div class="chat-list" id="chatList"></div>
-      <div class="sidebar-footer">
-        <div class="avatar" id="topAvatar">◉</div>
-        <div class="user-info">
-          <div class="user-name" id="topUsername">User</div>
-          <div class="user-status" id="topStatus">Online</div>
-        </div>
-        <button class="menu-btn" id="topProfile" title="Profil">👤</button>
-        <button class="menu-btn admin-only" id="settingsBtn" title="Agent sozlamalari">⚙</button>
-        <button class="menu-btn" id="logoutBtn" title="Chiqish">🚪</button>
-      </div>
     </div>
 
-    <!-- MAIN -->
-    <div class="main">
-      <div class="main-header">
-        <button class="mobile-menu" id="mobileMenu">☰</button>
-        <div class="chat-title">Qamir AI</div>
-        <div class="spacer"></div>
-        <div class="header-actions">
-          <button id="profileBtn" title="Profil">👤</button>
+    <!-- APP -->
+    <div id="appView" class="hidden">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <span class="brand">✦ Qamir AI</span>
+            </div>
+            <div class="sidebar-actions">
+                <button id="newChat">+ Yangi suhbat</button>
+            </div>
+            <div class="sidebar-title">Suhbatlar</div>
+            <div class="chat-list" id="chatList"></div>
+            <div class="sidebar-footer">
+                <div class="avatar" id="topAvatar">◉</div>
+                <div class="user-info">
+                    <div class="user-name" id="topUsername">User</div>
+                    <div class="user-status" id="topStatus">Online</div>
+                </div>
+                <button class="menu-btn" id="topProfile" title="Profil">👤</button>
+                <button class="menu-btn admin-only" id="settingsBtn" title="Agent sozlamalari">⚙</button>
+                <button class="menu-btn" id="logoutBtn" title="Chiqish">🚪</button>
+            </div>
         </div>
-      </div>
-      <div class="chat-container" id="chat"></div>
-      <div class="composer">
-        <textarea id="msg" rows="1" placeholder="Qamir AI'ga savolingizni yozing..."></textarea>
-        <button id="send">➤</button>
-      </div>
+
+        <div class="main">
+            <div class="main-header">
+                <div class="chat-title">Qamir AI</div>
+                <div class="spacer"></div>
+                <button id="profileBtn" title="Profil">👤</button>
+            </div>
+            <div class="chat-container" id="chat"></div>
+            <div class="composer">
+                <textarea id="msg" rows="1" placeholder="Qamir AI'ga savolingizni yozing..."></textarea>
+                <button id="send">➤</button>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <!-- ===== PROFILE MODAL ===== -->
-  <div id="profileModal" class="modal-overlay hidden">
-    <div class="modal">
-      <h2>👤 Profil</h2>
-      <div class="profile-photo">
-        <img id="profileAvatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%232d2340'/%3E%3Ctext x='50' y='65' font-size='40' text-anchor='middle' fill='%23a78bfa' font-family='Arial'%3E◉%3C/text%3E%3C/svg%3E" alt="Avatar">
-        <label class="upload-btn">Rasm tanlash <input id="avatarFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
-      </div>
-      <div class="form-group">
-        <label>Login</label>
-        <input type="text" id="profileUsername" disabled>
-      </div>
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="profileEmail" placeholder="Email manzilingiz">
-      </div>
-      <div class="form-group">
-        <label>Tug‘ilgan sana</label>
-        <input type="date" id="profileBirth">
-      </div>
-      <div class="form-group">
-        <label>Shahar</label>
-        <input type="text" id="profileCity" placeholder="Shahringiz">
-      </div>
-      <div class="form-group">
-        <label>Yangi parol</label>
-        <input type="password" id="profileNewPassword" placeholder="O‘zgartirmasangiz bo‘sh qoldiring">
-      </div>
-      <div id="profileError" class="error-text"></div>
-      <div class="modal-actions">
-        <button class="btn-primary" id="saveProfile">Saqlash</button>
-        <button class="btn-secondary" data-close="profileModal">Bekor</button>
-      </div>
+    <!-- PROFILE MODAL -->
+    <div id="profileModal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2>👤 Profil</h2>
+            <div class="avatar-upload">
+                <img id="profileAvatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%232d2340'/%3E%3Ctext x='50' y='65' font-size='40' text-anchor='middle' fill='%23a78bfa' font-family='Arial'%3E◉%3C/text%3E%3C/svg%3E" alt="Avatar">
+                <label class="upload-btn">Rasm tanlash <input id="avatarFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
+            </div>
+            <div class="form-group">
+                <label>Login</label>
+                <input type="text" id="profileUsername" disabled>
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="profileEmail" placeholder="Email manzilingiz">
+            </div>
+            <div class="form-group">
+                <label>Tug'ilgan sana</label>
+                <input type="date" id="profileBirth">
+            </div>
+            <div class="form-group">
+                <label>Shahar</label>
+                <input type="text" id="profileCity" placeholder="Shahringiz">
+            </div>
+            <div class="form-group">
+                <label>Yangi parol</label>
+                <input type="password" id="profileNewPassword" placeholder="O'zgartirmasangiz bo'sh qoldiring">
+            </div>
+            <div id="profileError" class="error-text"></div>
+            <div class="modal-actions">
+                <button class="btn-primary" id="saveProfile">Saqlash</button>
+                <button class="btn-secondary" data-close="profileModal">Bekor</button>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <!-- ===== SETTINGS MODAL ===== -->
-  <div id="settingsModal" class="modal-overlay hidden">
-    <div class="modal" style="max-width:500px;">
-      <h2>⚙ Agent boshqaruvi</h2>
+    <!-- SETTINGS MODAL -->
+    <div id="settingsModal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:500px;">
+            <h2>⚙ Agent boshqaruvi</h2>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #2d2340;padding-bottom:10px;margin-bottom:14px;">
+                <button class="tab active" data-tab="identity" style="padding:6px 14px;border:none;background:none;color:#8a7f9e;font-size:12px;cursor:pointer;border-radius:20px;">Shaxsiyat</button>
+                <button class="tab" data-tab="knowledge" style="padding:6px 14px;border:none;background:none;color:#8a7f9e;font-size:12px;cursor:pointer;border-radius:20px;">Bilimlar</button>
+                <button class="tab" data-tab="api" style="padding:6px 14px;border:none;background:none;color:#8a7f9e;font-size:12px;cursor:pointer;border-radius:20px;">AI / API</button>
+            </div>
 
-      <div class="settings-tabs">
-        <button class="tab active" data-tab="identity">Shaxsiyat</button>
-        <button class="tab" data-tab="knowledge">Bilimlar</button>
-        <button class="tab" data-tab="rules">Qoidalar</button>
-        <button class="tab" data-tab="style">Uslub</button>
-        <button class="tab" data-tab="improve">Takomil</button>
-        <button class="tab" data-tab="api">AI / API</button>
-      </div>
+            <div class="tab-panel active" id="tab-identity">
+                <div class="form-group"><label>Agent nomi</label><input type="text" id="agentName" placeholder="Qamir"></div>
+                <div class="form-group"><label>Brend nomi</label><input type="text" id="brandName" placeholder="Qamir AI"></div>
+                <div class="form-group"><label>Rol</label><textarea id="agentRole" rows="3" placeholder="Agent roli..."></textarea></div>
+                <div class="form-group"><label>Asosiy ko'rsatma</label><textarea id="agentInstruction" rows="4" placeholder="Agent ko'rsatmasi..."></textarea></div>
+            </div>
 
-      <!-- Shaxsiyat -->
-      <div class="tab-panel active" id="tab-identity">
-        <div class="form-group">
-          <label>Agent nomi</label>
-          <input type="text" id="agentName" placeholder="Qamir">
+            <div class="tab-panel" id="tab-knowledge">
+                <div class="form-group"><label>Bilim matni</label><textarea id="knowledgeText" rows="4" placeholder="Savol: ...&#10;Ma'lumot: ..."></textarea></div>
+                <button id="addKnowledge" style="width:100%;padding:10px;background:linear-gradient(135deg,#7c3aed,#6d28d9);border:none;border-radius:10px;color:#fff;font-weight:600;cursor:pointer;">+ Bilim qo'shish</button>
+                <div id="knowledgeList" style="margin-top:12px;"></div>
+            </div>
+
+            <div class="tab-panel" id="tab-api">
+                <div class="form-group"><label>Gemini API kaliti</label><input type="password" id="apiKey" placeholder="AIza..."></div>
+                <div class="form-group"><label>Model</label><input type="text" id="apiModel" placeholder="gemini-2.5-flash"></div>
+                <div class="api-status"><span class="dot"></span><span id="apiStatusText">API sozlanmagan</span></div>
+            </div>
+
+            <div id="settingsError" class="error-text"></div>
+            <div class="modal-actions">
+                <button class="btn-primary" id="saveSettings">Saqlash</button>
+                <button class="btn-secondary" data-close="settingsModal">Yopish</button>
+            </div>
         </div>
-        <div class="form-group">
-          <label>Brend nomi</label>
-          <input type="text" id="brandName" placeholder="Qamir AI">
-        </div>
-        <div class="form-group">
-          <label>Rol</label>
-          <textarea id="
+    </div>
+
+    <script>
+        // =====================================================
+        // QAMIR AI — TO'LIQ ISHLAYDI
+        // Admin: Admin / Al-qamir
+        // =====================================================
+
+        (function() {
+            "use strict";
+
+            const $ = id => document.getElementById(id);
+
+            // ===== STORAGE =====
+            const KEY = "qamir_ai_v5";
+
+            // ===== DEFAULTS =====
+            const DEFAULTS = {
+                agentName: "Qamir",
+                brandName: "Qamir AI",
+                role: "Mijozlarga o'zbek tilida foydali yordam beradigan sun'iy intellekt yordamchisi.",
+                instruction: "Siz Qamir AI nomli professional yordamchisiz. Admin bergan bilimlardan foydalaning.",
+                knowledge: [],
+                users: [],
+                sessions: [],
+                currentSession: null,
+                currentUserId: null,
+                apiKey: "",
+                model: "gemini-2.5-flash"
+            };
+
+            // ===== LOAD STATE =====
+            function loadState() {
+                try {
+                    const data = JSON.parse(localStorage.getItem(KEY) || "null");
+                    if (data && typeof data === "object") {
+                        return data;
+                    }
+                } catch (e) {
+                    console.error("Load error:", e);
+                }
+                return JSON.parse(JSON.stringify(DEFAULTS));
+            }
+
+            let state = loadState();
+
+            // ===== PERSIST =====
+            function persist() {
+                try {
+                    localStorage.setItem(KEY, JSON.stringify(state));
+                } catch (e) {
+                    console.error("Save error:", e);
+                    toast("Saqlashda muammo!");
+                }
+            }
+
+            // ===== HELPERS =====
+            function esc(s) {
+                return String(s || "")
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;")
+                    .replace(/\n/g, "<br>");
+            }
+
+            function now() {
+                const d = new Date();
+                return d.toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" }) +
+                    " • " + d.toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit", year: "numeric" });
+            }
+
+            function makeId() {
+                return "id_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+            }
+
+            function toast(text) {
+                const el = $("toast");
+                if (!el) return;
+                el.textContent = text;
+                el.classList.add("show");
+                clearTimeout(toast.timer);
+                toast.timer = setTimeout(() => el.classList.remove("show"), 2600);
+            }
+
+            // ===== ADMIN =====
+            function currentUser() {
+                return state.users.find(u => u.id === state.currentUserId) || null;
+            }
+
+            function isAdmin() {
+                const u = currentUser();
+                return u && u.username === "Admin";
+            }
+
+            function ensureAdmin() {
+                let admin = state.users.find(u => u.username === "Admin");
+                if (!admin) {
+                    admin = {
+                        id: "admin_" + Date.now(),
+                        username: "Admin",
+                        password: "Al-qamir",
+                        email: "",
+                        birthDate: "",
+                        city: "",
+                        avatar: "",
+                        createdAt: Date.now()
+                    };
+                    state.users.push(admin);
+                    persist();
+                    console.log("✅ Admin yaratildi: Admin / Al-qamir");
+                }
+                if (!admin.password || admin.password === "") {
+                    admin.password = "Al-qamir";
+                    persist();
+                }
+            }
+
+            ensureAdmin();
+
+            // ===== KNOWLEDGE =====
+            function findRelevantKnowledge(query, limit) {
+                limit = limit || 1;
+                const results = [];
+                state.knowledge.forEach(k => {
+                    const text = k.text || "";
+                    const score = text.toLowerCase().includes(query.toLowerCase()) ? 10 : 0;
+                    if (score > 0) {
+                        results.push({ knowledge: k, score: score });
+                    }
+                });
+                return results.sort((a, b) => b.score - a.score).slice(0, limit);
+            }
+
+            // ===== CALCULATOR =====
+            function calculatorAnswer(text) {
+                const nums = text.match(/(\d+)\s*([\+\-\*\/])\s*(\d+)/);
+                if (nums) {
+                    const a = Number(nums[1]);
+                    const op = nums[2];
+                    const b = Number(nums[3]);
+                    let result = 0;
+                    if (op === "+") result = a + b;
+                    else if (op === "-") result = a - b;
+                    else if (op === "*") result = a * b;
+                    else if (op === "/") result = a / b;
+                    return `${a} ${op} ${b} = ${result}`;
+                }
+                return null;
+            }
+
+            // ===== AI =====
+            async function getAIResponse(text) {
+                // Calculator
+                const calc = calculatorAnswer(text);
+                if (calc) return calc;
+
+                // Greeting
+                if (/^(salom|assalom|hello|hi|hay)\b/i.test(text)) {
+                    return "Salom! Men Qamir AI. Sizga qanday yordam beray? 😊";
+                }
+
+                // Knowledge
+                const matched = findRelevantKnowledge(text, 1);
+                if (matched.length > 0) {
+                    const k = matched[0].knowledge;
+                    const qa = k.text.split("\n");
+                    const answer = qa.find(line => line.toLowerCase().includes("ma'lumot") || line.toLowerCase().includes(
+                    "javob"));
+                    if (answer) {
+                        return answer.replace(/^(Ma'lumot|Javob)\s*:\s*/i, "").trim();
+                    }
+                    return k.text;
+                }
+
+                // API
+                const key = state.apiKey || "";
+                if (key) {
+                    try {
+                        const model = state.model || "gemini-2.5-flash";
+                        const res = await fetch(
+                            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+                            {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ text: text }] }]
+                                })
+                            }
+                        );
+                        const data = await res.json();
+                        if (data && data.candidates && data.candidates[0]) {
+                            return data.candidates[0].content.parts[0].text || "Javob topilmadi.";
+                        }
+                    } catch (e) {
+                        console.error("API error:", e);
+                    }
+                }
+
+                return "Men Qamir AI — sizga yordam berishga tayyorman.\n\nBu savol bo'yicha hozircha bazamda ma'lumot yo'q.";
+            }
+
+            // ===== SESSIONS =====
+            function userSessions() {
+                return state.sessions.filter(s => s.userId === state.currentUserId);
+            }
+
+            function activeSession() {
+                let s = state.sessions.find(x => x.id === state.currentSession && x.userId === state.currentUserId);
+                if (!s) {
+                    const list = userSessions();
+                    s = list[list.length - 1];
+                    if (!s) {
+                        s = {
+                            id: makeId(),
+                            userId: state.currentUserId,
+                            title: "Yangi suhbat",
+                            messages: [],
+                            createdAt: Date.now()
+                        };
+                        state.sessions.push(s);
+                    }
+                    state.currentSession = s.id;
+                    persist();
+                }
+                return s;
+            }
+
+            // ===== RENDER =====
+            function renderSessions() {
+                const list = $("chatList");
+                if (!list) return;
+                const items = userSessions().slice().reverse();
+                list.innerHTML = items.length ? items.map(s =>
+                    `<div class="chat-item ${s.id === state.currentSession ? 'active' : ''}" data-session="${s.id}">${esc(s.title)}</div>`
+                ).join("") : '<div style="color:#625a6c;padding:10px;">Hozircha suhbat yo\'q</div>';
+
+                list.querySelectorAll("[data-session]").forEach(el => {
+                    el.onclick = () => {
+                        state.currentSession = el.dataset.session;
+                        persist();
+                        renderSessions();
+                        renderChat();
+                    };
+                });
+            }
+
+            function renderChat() {
+                const s = activeSession();
+                const chat = $("chat");
+                if (!chat) return;
+
+                if (!s.messages.length) {
+                    chat.innerHTML = `<div class="empty-chat">
+                        <div class="hero">
+                            <h
