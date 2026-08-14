@@ -567,7 +567,6 @@ app.put("/api/settings", requireAdmin, async (req, res) => {
   }
 });
 
-
 app.put("/api/profile", requireUser, async (req, res) => {
   try {
     const { email = "", birth_date = "", city = "", avatar = "", password = "" } = req.body || {};
@@ -653,11 +652,6 @@ app.post("/api/chat", requireUser, async (req, res) => {
 
     await db(`UPDATE users SET last_seen = NOW() WHERE id = $1`, [req.user.id]);
 
-    /*
-      1. AVVAL QAMIRNING O'Z BILIMI.
-      2. Kuchli moslik bo'lsa Gemini chaqirilmaydi.
-      3. Moslik yetarli bo'lmasa Gemini yordamchi sifatida ishlaydi.
-    */
     const matches = await findKnowledge(text, 5);
     let answer = null;
     let source = "unknown";
@@ -801,17 +795,8 @@ app.post("/api/admin/improve/:id/reject", requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-app.get("/", (req, res) => {
-  res.json({
-    name: "Qamir AI Backend",
-    status: "online"
-  });
-});
-
-/*
-  Express 5 uchun app.get("*") ISHLATILMAYDI.
-  Aynan shu eski wildcard route Render'dagi PathError xatosini bergan edi.
-*/
+// TO'G'RILANGAN STATIK FAYLLARNI ULASH QISMI:
+app.use(express.static(__dirname));
 
 initDb()
   .then(() => {
