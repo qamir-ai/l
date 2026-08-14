@@ -488,7 +488,6 @@ function scoreKnowledge(query, item) {
 
   let score = 0;
 
-  // Exact question.
   if (
     question &&
     normalizedQuery === question
@@ -496,7 +495,6 @@ function scoreKnowledge(query, item) {
     score += 180;
   }
 
-  // Exact / close alternative questions.
   for (const alt of alternatives) {
     const altNorm = normalize(alt);
 
@@ -549,15 +547,12 @@ function scoreKnowledge(query, item) {
     score += 80;
   }
 
-  // Answer is deliberately very weak.
-  // This prevents unrelated knowledge from matching.
   const answerHits = overlapCount(qWords, answer);
   const rawHits = overlapCount(qWords, rawText);
 
   score += Math.min(answerHits, 2) * 2;
   score += Math.min(rawHits, 2);
 
-  // Small typo tolerance.
   for (const q of qWords) {
     if (q.length < 4) continue;
 
@@ -579,7 +574,6 @@ function scoreKnowledge(query, item) {
     }
   }
 
-  // Do not attach short/random questions to arbitrary knowledge.
   if (
     qWords.length === 1 &&
     strongestHits === 0
@@ -653,71 +647,168 @@ function chooseKnowledgeAnswer(matches) {
 }
 
 // ============================================================
-// SAFE CALCULATOR
+// ADVANCED CALCULATOR
 // ============================================================
 
-function normalizeMathExpression(text) {
-  let expr = String(text || "")
+function formatNumber(value) {
+  if (Object.is(value, -0)) {
+    value = 0;
+  }
+
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return Number(
+    value.toFixed(12)
+  ).toLocaleString("uz-UZ", {
+    maximumFractionDigits: 12,
+    useGrouping: false
+  });
+}
+
+function factorial(n) {
+  n = Number(n);
+
+  if (!Number.isInteger(n) || n < 0 || n > 170) {
+    throw new Error(
+      "Faktorial uchun 0 dan 170 gacha butun son kerak."
+    );
+  }
+
+  let result = 1;
+
+  for (let i = 2; i <= n; i++) {
+    result *= i;
+  }
+
+  return result;
+}
+
+function degToRad(x) {
+  return x * Math.PI / 180;
+}
+
+function radToDeg(x) {
+  return x * 180 / Math.PI;
+}
+
+function normalizeMathQuestion(text) {
+  return String(text || "")
+    .trim()
     .toLowerCase()
-    .replace(/,/g, ".")
-    .replace(/[×✕x]/g, "*")
-    .replace(/[÷]/g, "/")
+    .replace(/[ʻ’‘`´']/g, "")
     .replace(/[−–—]/g, "-")
-    .replace(/\bplus\b/g, "+")
-    .replace(/\bminus\b/g, "-")
-    .replace(/\btimes\b/g, "*")
-    .replace(/\bdivided by\b/g, "/")
-    .replace(/\bbo.?lish\b/g, "/")
-    .replace(/\bkopaytirish\b/g, "*")
-    .replace(/\bkopaytir\b/g, "*")
-    .replace(/\byig.?indi\b/g, "+")
-    .replace(/\bayirma\b/g, "-")
-    .replace(/\bfoiz\b/g, "%")
-    .trim();
-
-  expr = expr
-    .replace(/^hisobla\s*[:=]?\s*/, "")
-    .replace(/^hisoblab\s*ber\s*[:=]?\s*/, "")
-    .replace(/^hisob-kitob\s*[:=]?\s*/, "")
-    .replace(/^necha\s+boladi\s+/, "")
-    .replace(/\s+necha\s+boladi\??$/i, "")
-    .replace(/\s+chiqadi\??$/i, "")
-    .replace(/\?+$/g, "")
-    .trim();
-
-  return expr;
+    .replace(/[×✕]/g, "*")
+    .replace(/÷/g, "/")
+    .replace(/,/g, ".")
+    .replace(/\s+/g, " ");
 }
 
-function looksLikeMathQuestion(text) {
-  const expr = normalizeMathExpression(text);
+function calculatePercentage(text) {
+  const q = normalizeMathQuestion(text);
 
-  if (!expr) return false;
-
-  const lower = normalize(text);
-
-  const explicit =
-    /(hisobla|hisoblab ber|hisob-kitob|necha boladi|qancha boladi|yech|calculate)/i
-      .test(lower);
-
-  const mathChars =
-    /[0-9]/.test(expr) &&
-    /[+\-*/%^()]/.test(expr);
-
-  const pure =
-    /^[0-9.\s+\-*/%^()]+$/.test(expr);
-
-  return (
-    (explicit && /[0-9]/.test(expr)) ||
-    (pure && mathChars)
+  // 200 ning 15 foizi
+  let m = q.match(
+    /^(-?\d+(?:\.\d+)?)\s+ning\s+(-?\d+(?:\.\d+)?)\s*foiz(?:i|ini)?(?:\s+qancha)?$/
   );
+
+  if (m) {
+    const base = Number(m[1]);
+    const percent = Number(m[2]);
+    const result = base * percent / 100;
+
+    return {
+      answer:
+        `${formatNumber(base)} ning ${formatNumber(percent)}% = ${formatNumber(result)}`,
+      result
+    };
+  }
+
+  // 15 foiz 200
+  m = q.match(
+    /^(-?\d+(?:\.\d+)?)\s*foiz(?:i|ini)?\s+(-?\d+(?:\.\d+)?)$/
+  );
+
+  if (m) {
+    const percent = Number(m[1]);
+    const base = Number(m[2]);
+    const result = base * percent / 100;
+
+    return {
+      answer:
+        `${formatNumber(percent)}% ${formatNumber(base)} ning = ${formatNumber(result)}`,
+      result
+    };
+  }
+
+  // 15% of 200
+  m = q.match(
+    /^(-?\d+(?:\.\d+)?)\s*%\s*(?:of|dan)\s*(-?\d+(?:\.\d+)?)$/
+  );
+
+  if (m) {
+    const percent = Number(m[1]);
+    const base = Number(m[2]);
+    const result = base * percent / 100;
+
+    return {
+      answer:
+        `${formatNumber(percent)}% of ${formatNumber(base)} = ${formatNumber(result)}`,
+      result
+    };
+  }
+
+  // 15% of 200 with "hisobla"
+  m = q.match(
+    /(-?\d+(?:\.\d+)?)\s*%\s*(?:of|dan)\s*(-?\d+(?:\.\d+)?)/
+  );
+
+  if (m) {
+    const percent = Number(m[1]);
+    const base = Number(m[2]);
+    const result = base * percent / 100;
+
+    return {
+      answer:
+        `${formatNumber(percent)}% of ${formatNumber(base)} = ${formatNumber(result)}`,
+      result
+    };
+  }
+
+  // 200 + 15%
+  m = q.match(
+    /^(-?\d+(?:\.\d+)?)\s*([+-])\s*(-?\d+(?:\.\d+)?)\s*%$/
+  );
+
+  if (m) {
+    const base = Number(m[1]);
+    const op = m[2];
+    const percent = Number(m[3]);
+
+    const delta = base * percent / 100;
+
+    const result =
+      op === "+"
+        ? base + delta
+        : base - delta;
+
+    return {
+      answer:
+        `${formatNumber(base)} ${op} ${formatNumber(percent)}% = ${formatNumber(result)}`,
+      result
+    };
+  }
+
+  return null;
 }
 
-function evaluateExpression(expr) {
+function tokenizeMathExpression(expression) {
   const tokens = [];
   let i = 0;
 
-  while (i < expr.length) {
-    const ch = expr[i];
+  while (i < expression.length) {
+    const ch = expression[i];
 
     if (/\s/.test(ch)) {
       i++;
@@ -725,41 +816,70 @@ function evaluateExpression(expr) {
     }
 
     if (/[0-9.]/.test(ch)) {
-      let start = i;
-      let dots = 0;
+      const start = i;
+      let dotCount = 0;
 
       while (
-        i < expr.length &&
-        /[0-9.]/.test(expr[i])
+        i < expression.length &&
+        /[0-9.]/.test(expression[i])
       ) {
-        if (expr[i] === ".") {
-          dots++;
+        if (expression[i] === ".") {
+          dotCount++;
         }
 
         i++;
       }
 
-      const raw = expr.slice(start, i);
+      const raw = expression.slice(start, i);
 
-      if (dots > 1 || raw === ".") {
+      if (dotCount > 1 || raw === ".") {
         throw new Error("Noto‘g‘ri son");
       }
 
-      const num = Number(raw);
+      const value = Number(raw);
 
-      if (!Number.isFinite(num)) {
+      if (!Number.isFinite(value)) {
         throw new Error("Noto‘g‘ri son");
       }
 
       tokens.push({
         type: "number",
-        value: num
+        value
       });
 
       continue;
     }
 
-    if ("+-*/%^()".includes(ch)) {
+    if (/[a-zA-Z]/.test(ch)) {
+      const start = i;
+
+      while (
+        i < expression.length &&
+        /[a-zA-Z]/.test(expression[i])
+      ) {
+        i++;
+      }
+
+      tokens.push({
+        type: "identifier",
+        value: expression
+          .slice(start, i)
+          .toLowerCase()
+      });
+
+      continue;
+    }
+
+    if (
+      ch === "+" ||
+      ch === "-" ||
+      ch === "*" ||
+      ch === "/" ||
+      ch === "%" ||
+      ch === "^" ||
+      ch === "(" ||
+      ch === ")"
+    ) {
       tokens.push({
         type: ch,
         value: ch
@@ -769,10 +889,62 @@ function evaluateExpression(expr) {
       continue;
     }
 
-    throw new Error("Noma’lum matematik belgi");
+    throw new Error(
+      "Noma’lum matematik belgi"
+    );
   }
 
+  return tokens;
+}
+
+function evaluateAdvancedExpression(expression) {
+  const tokens =
+    tokenizeMathExpression(expression);
+
   let pos = 0;
+
+  const constants = {
+    pi: Math.PI,
+    e: Math.E
+  };
+
+  const functions = {
+    sqrt: x => Math.sqrt(x),
+    abs: x => Math.abs(x),
+    floor: x => Math.floor(x),
+    ceil: x => Math.ceil(x),
+    round: x => Math.round(x),
+
+    sin: x => Math.sin(degToRad(x)),
+    cos: x => Math.cos(degToRad(x)),
+    tan: x => Math.tan(degToRad(x)),
+
+    asin: x => radToDeg(Math.asin(x)),
+    acos: x => radToDeg(Math.acos(x)),
+    atan: x => radToDeg(Math.atan(x)),
+
+    ln: x => Math.log(x),
+    log: x => Math.log10(x),
+
+    exp: x => Math.exp(x),
+
+    pow: (a, b) => Math.pow(a, b),
+
+    fact: factorial
+  };
+
+  function ensureFinite(value) {
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value)
+    ) {
+      throw new Error(
+        "Matematik natija yaroqsiz"
+      );
+    }
+
+    return value;
+  }
 
   function parseExpression() {
     let value = parseTerm();
@@ -784,54 +956,69 @@ function evaluateExpression(expr) {
         tokens[pos].type === "-"
       )
     ) {
-      const op = tokens[pos++].type;
-      const rhs = parseTerm();
+      const op =
+        tokens[pos++].type;
+
+      const right =
+        parseTerm();
 
       value =
         op === "+"
-          ? value + rhs
-          : value - rhs;
+          ? value + right
+          : value - right;
+
+      ensureFinite(value);
     }
 
     return value;
   }
 
   function parseTerm() {
-    let value = parsePower();
+    let value =
+      parsePower();
 
     while (
       pos < tokens.length &&
-      ["*", "/", "%"].includes(tokens[pos].type)
+      (
+        tokens[pos].type === "*" ||
+        tokens[pos].type === "/" ||
+        tokens[pos].type === "%"
+      )
     ) {
-      const op = tokens[pos++].type;
-      const rhs = parsePower();
+      const op =
+        tokens[pos++].type;
 
-      if (op === "*") {
-        value *= rhs;
-      } else if (op === "/") {
-        if (rhs === 0) {
+      const right =
+        parsePower();
+
+      if (
+        op === "/" ||
+        op === "%"
+      ) {
+        if (right === 0) {
           throw new Error(
             "0 ga bo‘lish mumkin emas"
           );
         }
-
-        value /= rhs;
-      } else {
-        if (rhs === 0) {
-          throw new Error(
-            "0 bo‘yicha qoldiq hisoblab bo‘lmaydi"
-          );
-        }
-
-        value %= rhs;
       }
+
+      if (op === "*") {
+        value *= right;
+      } else if (op === "/") {
+        value /= right;
+      } else {
+        value %= right;
+      }
+
+      ensureFinite(value);
     }
 
     return value;
   }
 
   function parsePower() {
-    let value = parseUnary();
+    let value =
+      parseUnary();
 
     if (
       pos < tokens.length &&
@@ -839,8 +1026,16 @@ function evaluateExpression(expr) {
     ) {
       pos++;
 
-      const rhs = parsePower();
-      value = Math.pow(value, rhs);
+      const right =
+        parsePower();
+
+      value =
+        Math.pow(
+          value,
+          right
+        );
+
+      ensureFinite(value);
     }
 
     return value;
@@ -860,10 +1055,31 @@ function evaluateExpression(expr) {
       tokens[pos].type === "-"
     ) {
       pos++;
-      return -parseUnary();
+
+      const value =
+        -parseUnary();
+
+      return ensureFinite(value);
     }
 
-    return parsePrimary();
+    return parsePostfix();
+  }
+
+  function parsePostfix() {
+    let value =
+      parsePrimary();
+
+    while (
+      pos < tokens.length &&
+      tokens[pos].type === "!"
+    ) {
+      pos++;
+
+      value =
+        factorial(value);
+    }
+
+    return ensureFinite(value);
   }
 
   function parsePrimary() {
@@ -873,20 +1089,129 @@ function evaluateExpression(expr) {
       );
     }
 
-    const token = tokens[pos];
+    const token =
+      tokens[pos];
 
-    if (token.type === "number") {
+    if (
+      token.type === "number"
+    ) {
       pos++;
       return token.value;
     }
 
-    if (token.type === "(") {
+    if (
+      token.type === "identifier"
+    ) {
       pos++;
 
-      const value = parseExpression();
+      const name =
+        token.value;
 
       if (
-        !tokens[pos] ||
+        pos < tokens.length &&
+        tokens[pos].type === "("
+      ) {
+        pos++;
+
+        const args = [];
+
+        if (
+          pos < tokens.length &&
+          tokens[pos].type !== ")"
+        ) {
+          args.push(
+            parseExpression()
+          );
+
+          while (
+            pos < tokens.length &&
+            tokens[pos].type === ","
+          ) {
+            pos++;
+            args.push(
+              parseExpression()
+            );
+          }
+        }
+
+        if (
+          pos >= tokens.length ||
+          tokens[pos].type !== ")"
+        ) {
+          throw new Error(
+            "Funksiya qavsi yopilmagan"
+          );
+        }
+
+        pos++;
+
+        if (
+          !Object.prototype.hasOwnProperty.call(
+            functions,
+            name
+          )
+        ) {
+          throw new Error(
+            `Noma’lum funksiya: ${name}`
+          );
+        }
+
+        const fn =
+          functions[name];
+
+        let result;
+
+        if (
+          name === "pow"
+        ) {
+          if (args.length !== 2) {
+            throw new Error(
+              "pow(a,b) ikkita qiymat oladi"
+            );
+          }
+
+          result =
+            fn(args[0], args[1]);
+        } else {
+          if (args.length !== 1) {
+            throw new Error(
+              `${name}() bitta qiymat oladi`
+            );
+          }
+
+          result =
+            fn(args[0]);
+        }
+
+        return ensureFinite(
+          result
+        );
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(
+          constants,
+          name
+        )
+      ) {
+        return constants[name];
+      }
+
+      throw new Error(
+        `Noma’lum matematik nom: ${name}`
+      );
+    }
+
+    if (
+      token.type === "("
+    ) {
+      pos++;
+
+      const value =
+        parseExpression();
+
+      if (
+        pos >= tokens.length ||
         tokens[pos].type !== ")"
       ) {
         throw new Error(
@@ -895,6 +1220,7 @@ function evaluateExpression(expr) {
       }
 
       pos++;
+
       return value;
     }
 
@@ -903,50 +1229,757 @@ function evaluateExpression(expr) {
     );
   }
 
-  const result = parseExpression();
+  const result =
+    parseExpression();
 
-  if (pos !== tokens.length) {
+  if (
+    pos !== tokens.length
+  ) {
     throw new Error(
-      "Ifoda noto‘g‘ri"
+      "Ifodaning bir qismi tushunilmadi"
     );
   }
 
-  if (!Number.isFinite(result)) {
-    throw new Error(
-      "Natija yaroqsiz"
-    );
-  }
-
-  return result;
+  return ensureFinite(result);
 }
 
-function formatNumber(value) {
-  if (Object.is(value, -0)) {
-    value = 0;
-  }
+function solveQuadratic(text) {
+  let q =
+    normalizeMathQuestion(text)
+      .replace(/x²/g, "x^2")
+      .replace(/\s+/g, "");
 
-  if (Number.isInteger(value)) {
-    return String(value);
-  }
-
-  return Number(
-    value.toFixed(10)
-  ).toLocaleString("uz-UZ", {
-    maximumFractionDigits: 10,
-    useGrouping: false
-  });
-}
-
-function tryCalculate(text) {
-  if (!looksLikeMathQuestion(text)) {
+  if (
+    !q.includes("=") ||
+    !q.includes("x")
+  ) {
     return null;
   }
 
-  const expression =
-    normalizeMathExpression(text);
+  const parts =
+    q.split("=");
 
   if (
-    !/^[0-9.\s+\-*/%^()]+$/.test(
+    parts.length !== 2
+  ) {
+    return null;
+  }
+
+  function parsePolynomial(poly) {
+    let clean =
+      poly
+        .replace(/\(/g, "")
+        .replace(/\)/g, "");
+
+    clean =
+      clean.replace(
+        /-/g,
+        "+-"
+      );
+
+    if (
+      clean.startsWith("+")
+    ) {
+      clean =
+        clean.slice(1);
+    }
+
+    const terms =
+      clean
+        .split("+")
+        .filter(Boolean);
+
+    let a = 0;
+    let b = 0;
+    let c = 0;
+
+    for (let term of terms) {
+      term =
+        term.replace(
+          /\*/g,
+          ""
+        );
+
+      let match =
+        term.match(
+          /^([+-]?\d*\.?\d*)x\^2$/
+        );
+
+      if (match) {
+        let coef =
+          match[1];
+
+        if (
+          coef === "" ||
+          coef === "+"
+        ) {
+          coef = 1;
+        } else if (
+          coef === "-"
+        ) {
+          coef = -1;
+        } else {
+          coef =
+            Number(coef);
+        }
+
+        a += coef;
+        continue;
+      }
+
+      match =
+        term.match(
+          /^([+-]?\d*\.?\d*)x$/
+        );
+
+      if (match) {
+        let coef =
+          match[1];
+
+        if (
+          coef === "" ||
+          coef === "+"
+        ) {
+          coef = 1;
+        } else if (
+          coef === "-"
+        ) {
+          coef = -1;
+        } else {
+          coef =
+            Number(coef);
+        }
+
+        b += coef;
+        continue;
+      }
+
+      if (
+        /^[+-]?\d*\.?\d+$/.test(
+          term
+        )
+      ) {
+        c +=
+          Number(term);
+        continue;
+      }
+
+      return null;
+    }
+
+    return { a, b, c };
+  }
+
+  const left =
+    parsePolynomial(parts[0]);
+
+  const right =
+    parsePolynomial(parts[1]);
+
+  if (!left || !right) {
+    return null;
+  }
+
+  const a =
+    left.a - right.a;
+
+  const b =
+    left.b - right.b;
+
+  const c =
+    left.c - right.c;
+
+  if (
+    Math.abs(a) < 1e-12 &&
+    Math.abs(b) < 1e-12
+  ) {
+    return null;
+  }
+
+  if (
+    Math.abs(a) < 1e-12
+  ) {
+    const x =
+      -c / b;
+
+    return {
+      answer:
+        `Tenglama yechimi: x = ${formatNumber(x)}`
+    };
+  }
+
+  const D =
+    b * b - 4 * a * c;
+
+  if (
+    D < 0
+  ) {
+    const real =
+      -b / (2 * a);
+
+    const imaginary =
+      Math.sqrt(-D) /
+      Math.abs(2 * a);
+
+    return {
+      answer:
+        `Diskriminant D = ${formatNumber(D)}.\n` +
+        `Haqiqiy ildiz yo‘q.\n` +
+        `Kompleks ildizlar:\n` +
+        `x₁ = ${formatNumber(real)} + ${formatNumber(imaginary)}i\n` +
+        `x₂ = ${formatNumber(real)} - ${formatNumber(imaginary)}i`
+    };
+  }
+
+  if (
+    Math.abs(D) < 1e-12
+  ) {
+    const x =
+      -b / (2 * a);
+
+    return {
+      answer:
+        `Diskriminant D = 0.\n` +
+        `Yagona ildiz: x = ${formatNumber(x)}`
+    };
+  }
+
+  const sqrtD =
+    Math.sqrt(D);
+
+  const x1 =
+    (-b + sqrtD) /
+    (2 * a);
+
+  const x2 =
+    (-b - sqrtD) /
+    (2 * a);
+
+  return {
+    answer:
+      `Diskriminant D = ${formatNumber(D)}.\n` +
+      `x₁ = ${formatNumber(x1)}\n` +
+      `x₂ = ${formatNumber(x2)}`
+  };
+}
+
+function derivativePolynomial(text) {
+  const q =
+    normalizeMathQuestion(text);
+
+  if (
+    !q.includes("d/dx") &&
+    !q.includes("hosila")
+  ) {
+    return null;
+  }
+
+  let expr =
+    q
+      .replace(
+        /^.*d\/dx\s*\(?/i,
+        ""
+      )
+      .replace(
+        /\)?\s*$/g,
+        ""
+      )
+      .replace(
+        /^.*hosila\s*[:=]?\s*/i,
+        ""
+      )
+      .trim();
+
+  expr =
+    expr
+      .replace(
+        /x²/g,
+        "x^2"
+      )
+      .replace(
+        /\s+/g,
+        ""
+      );
+
+  const terms =
+    expr
+      .replace(
+        /-/g,
+        "+-"
+      )
+      .split("+")
+      .filter(Boolean);
+
+  if (!terms.length) {
+    return null;
+  }
+
+  const resultTerms = [];
+
+  for (const originalTerm of terms) {
+    const term =
+      originalTerm
+        .replace(/\*/g, "");
+
+    if (term === "x") {
+      resultTerms.push("1");
+      continue;
+    }
+
+    let match =
+      term.match(
+        /^([+-]?\d*\.?\d*)x\^(\d+(?:\.\d+)?)$/
+      );
+
+    if (match) {
+      let coef =
+        match[1];
+
+      if (
+        coef === "" ||
+        coef === "+"
+      ) {
+        coef = 1;
+      } else if (
+        coef === "-"
+      ) {
+        coef = -1;
+      } else {
+        coef =
+          Number(coef);
+      }
+
+      const power =
+        Number(match[2]);
+
+      const newCoef =
+        coef * power;
+
+      const newPower =
+        power - 1;
+
+      if (
+        Math.abs(newPower) < 1e-12
+      ) {
+        resultTerms.push(
+          formatNumber(
+            newCoef
+          )
+        );
+      } else if (
+        Math.abs(
+          newPower - 1
+        ) < 1e-12
+      ) {
+        resultTerms.push(
+          `${formatNumber(newCoef)}x`
+        );
+      } else {
+        resultTerms.push(
+          `${formatNumber(newCoef)}x^${formatNumber(newPower)}`
+        );
+      }
+
+      continue;
+    }
+
+    match =
+      term.match(
+        /^([+-]?\d*\.?\d*)x$/
+      );
+
+    if (match) {
+      let coef =
+        match[1];
+
+      if (
+        coef === "" ||
+        coef === "+"
+      ) {
+        coef = 1;
+      } else if (
+        coef === "-"
+      ) {
+        coef = -1;
+      } else {
+        coef =
+          Number(coef);
+      }
+
+      resultTerms.push(
+        formatNumber(
+          coef
+        )
+      );
+
+      continue;
+    }
+
+    if (
+      /^[+-]?\d*\.?\d+$/.test(
+        term
+      )
+    ) {
+      continue;
+    }
+
+    return null;
+  }
+
+  if (!resultTerms.length) {
+    return {
+      answer:
+        "Hosila: 0"
+    };
+  }
+
+  const resultText =
+    resultTerms
+      .join(" + ")
+      .replace(
+        /\+\s+-/g,
+        "- "
+      );
+
+  return {
+    answer:
+      `Hosila: ${resultText}`
+  };
+}
+
+function definitePolynomialIntegral(text) {
+  const q =
+    normalizeMathQuestion(text);
+
+  if (
+    !q.includes("integral") &&
+    !q.includes("∫")
+  ) {
+    return null;
+  }
+
+  let expression =
+    "";
+
+  let lower =
+    null;
+
+  let upper =
+    null;
+
+  // integral 0 dan 2 gacha x^2
+  let match =
+    q.match(
+      /(?:integral|∫)\s*(-?\d+(?:\.\d+)?)\s*(?:dan|to|-)\s*(-?\d+(?:\.\d+)?)\s*(?:gacha)?\s+(.+)/
+    );
+
+  if (match) {
+    lower =
+      Number(match[1]);
+
+    upper =
+      Number(match[2]);
+
+    expression =
+      match[3];
+  }
+
+  // integral x^2 dan 0 gacha 2
+  if (
+    lower === null ||
+    upper === null
+  ) {
+    match =
+      q.match(
+        /(.+?)\s+(?:dan|from)\s+(-?\d+(?:\.\d+)?)\s+(?:gacha|to)\s+(-?\d+(?:\.\d+)?)/
+      );
+
+    if (match) {
+      expression =
+        match[1];
+
+      lower =
+        Number(match[2]);
+
+      upper =
+        Number(match[3]);
+    }
+  }
+
+  if (
+    lower === null ||
+    upper === null ||
+    !Number.isFinite(lower) ||
+    !Number.isFinite(upper) ||
+    !expression
+  ) {
+    return null;
+  }
+
+  const terms =
+    expression
+      .replace(
+        /x²/g,
+        "x^2"
+      )
+      .replace(
+        /\s+/g,
+        ""
+      )
+      .replace(
+        /-/g,
+        "+-"
+      )
+      .split("+")
+      .filter(Boolean);
+
+  function antiDerivativeAt(x) {
+    let total =
+      0;
+
+    for (const originalTerm of terms) {
+      const term =
+        originalTerm
+          .replace(
+            /\*/g,
+            ""
+          );
+
+      let match =
+        term.match(
+          /^([+-]?\d*\.?\d*)x\^(\d+(?:\.\d+)?)$/
+        );
+
+      if (match) {
+        let coef =
+          match[1];
+
+        if (
+          coef === "" ||
+          coef === "+"
+        ) {
+          coef = 1;
+        } else if (
+          coef === "-"
+        ) {
+          coef = -1;
+        } else {
+          coef =
+            Number(coef);
+        }
+
+        const power =
+          Number(match[2]);
+
+        total +=
+          coef *
+          Math.pow(
+            x,
+            power + 1
+          ) /
+          (power + 1);
+
+        continue;
+      }
+
+      match =
+        term.match(
+          /^([+-]?\d*\.?\d*)x$/
+        );
+
+      if (match) {
+        let coef =
+          match[1];
+
+        if (
+          coef === "" ||
+          coef === "+"
+        ) {
+          coef = 1;
+        } else if (
+          coef === "-"
+        ) {
+          coef = -1;
+        } else {
+          coef =
+            Number(coef);
+        }
+
+        total +=
+          coef *
+          x *
+          x /
+          2;
+
+        continue;
+      }
+
+      if (
+        /^[+-]?\d*\.?\d+$/.test(
+          term
+        )
+      ) {
+        total +=
+          Number(term) *
+          x;
+
+        continue;
+      }
+
+      throw new Error(
+        "Bu integral turi hozircha qo‘llanmagan."
+      );
+    }
+
+    return total;
+  }
+
+  try {
+    const result =
+      antiDerivativeAt(
+        upper
+      ) -
+      antiDerivativeAt(
+        lower
+      );
+
+    return {
+      answer:
+        `Aniq integral natijasi: ${formatNumber(result)}`
+    };
+  } catch {
+    return null;
+  }
+}
+
+function tryCalculate(text) {
+  const original =
+    String(text || "").trim();
+
+  if (!original) {
+    return null;
+  }
+
+  // 1. Foizlar
+  const percentage =
+    calculatePercentage(
+      original
+    );
+
+  if (percentage) {
+    return {
+      expression: original,
+      result:
+        percentage.result,
+      answer:
+        `Javob: ${percentage.answer}`
+    };
+  }
+
+  // 2. Tenglamalar
+  const quadratic =
+    solveQuadratic(
+      original
+    );
+
+  if (quadratic) {
+    return {
+      expression: original,
+      result: null,
+      answer:
+        quadratic.answer
+    };
+  }
+
+  // 3. Hosila
+  const derivative =
+    derivativePolynomial(
+      original
+    );
+
+  if (derivative) {
+    return {
+      expression: original,
+      result: null,
+      answer:
+        derivative.answer
+    };
+  }
+
+  // 4. Aniq integral
+  const integral =
+    definitePolynomialIntegral(
+      original
+    );
+
+  if (integral) {
+    return {
+      expression: original,
+      result: null,
+      answer:
+        integral.answer
+    };
+  }
+
+  let expression =
+    normalizeMathQuestion(
+      original
+    )
+      .replace(
+        /^(hisobla|hisoblab ber|hisob-kitob|calculate)\s*/i,
+        ""
+      )
+      .replace(
+        /^qancha\s+boladi\s*/i,
+        ""
+      )
+      .replace(
+        /^natijasi\s*/i,
+        ""
+      )
+      .replace(
+        /\?+$/g,
+        ""
+      )
+      .trim();
+
+  // √ belgisi
+  expression =
+    expression.replace(
+      /√\s*([0-9.]+)/g,
+      "sqrt($1)"
+    );
+
+  const containsNumber =
+    /[0-9]/.test(
+      expression
+    );
+
+  const containsMathOperator =
+    /[+\-*/%^()]/.test(
+      expression
+    );
+
+  const containsMathFunction =
+    /\b(sqrt|sin|cos|tan|asin|acos|atan|log|ln|exp|abs|floor|ceil|round|fact|pow)\b/i
+      .test(expression) ||
+    /π|\bpi\b|\be\b/i.test(
+      expression
+    );
+
+  if (
+    !containsNumber ||
+    (
+      !containsMathOperator &&
+      !containsMathFunction
+    )
+  ) {
+    return null;
+  }
+
+  // Ruxsat etilgan matematik belgilar va nomlar.
+  if (
+    !/^[0-9a-zA-Z_+\-*/%^().,\s√]+$/u.test(
       expression
     )
   ) {
@@ -955,7 +1988,9 @@ function tryCalculate(text) {
 
   try {
     const result =
-      evaluateExpression(expression);
+      evaluateAdvancedExpression(
+        expression
+      );
 
     return {
       expression,
@@ -963,7 +1998,7 @@ function tryCalculate(text) {
       answer:
         `Javob: ${formatNumber(result)}`
     };
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -1050,7 +2085,7 @@ Uzunlik: ${settings.answer_length || "O‘rtacha"}
 MUHIM:
 Savolga to‘g‘ridan-to‘g‘ri va tabiiy javob bering.
 Bilim matnini to‘liq ko‘chirmang.
-Agar foydalanuvchi oddiy hisob-kitob so‘rasa,
+Agar foydalanuvchi hisob-kitob so‘rasa,
 aniq natija bering.
 
 QAMIR BILIMLARI:
@@ -2187,7 +3222,7 @@ initDb()
         );
 
         console.log(
-          "Calculator: enabled"
+          "Advanced calculator: enabled"
         );
 
         console.log(
