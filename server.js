@@ -795,7 +795,6 @@ app.post("/api/admin/improve/:id/reject", requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-// TO'G'RILANGAN STATIK FAYLLARNI ULASH QISMI:
 app.use(express.static(__dirname));
 
 initDb()
