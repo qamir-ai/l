@@ -15,23 +15,17 @@
             background: #0b0811;
             color: #f0e8ff;
             height: 100vh;
-            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .hidden {
             display: none !important;
         }
 
-        /* AUTH */
-        #authView {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            background: radial-gradient(ellipse at 50% 30%, #1f1533, #0b0811 70%);
-        }
         .auth-container {
             width: 100%;
-            max-width: 400px;
+            max-width: 380px;
             padding: 20px;
         }
         .auth-box {
@@ -137,286 +131,6 @@
             padding-top: 16px;
         }
 
-        /* APP */
-        #appView {
-            display: flex;
-            height: 100vh;
-        }
-        #appView.hidden {
-            display: none;
-        }
-
-        /* SIDEBAR */
-        .sidebar {
-            width: 250px;
-            background: #100d18;
-            border-right: 1px solid #201a2b;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            flex-shrink: 0;
-        }
-        .sidebar-header {
-            padding: 16px 18px;
-            border-bottom: 1px solid #1e172b;
-        }
-        .sidebar-header .brand {
-            font-size: 20px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #a78bfa, #7c3aed);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .sidebar-actions {
-            padding: 10px 14px;
-            border-bottom: 1px solid #1e172b;
-        }
-        .sidebar-actions button {
-            width: 100%;
-            padding: 10px;
-            background: linear-gradient(135deg, #7c3aed, #6d28d9);
-            border: none;
-            border-radius: 10px;
-            color: #fff;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .sidebar-title {
-            padding: 12px 18px 6px;
-            font-size: 10px;
-            text-transform: uppercase;
-            color: #4a4058;
-            font-weight: 600;
-        }
-        .chat-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 4px 10px;
-        }
-        .chat-item {
-            padding: 10px 14px;
-            border-radius: 10px;
-            font-size: 14px;
-            color: #c8c0d8;
-            cursor: pointer;
-        }
-        .chat-item:hover {
-            background: #1e172b;
-        }
-        .chat-item.active {
-            background: #2d2340;
-            color: #f0e8ff;
-        }
-        .sidebar-footer {
-            padding: 12px 16px;
-            border-top: 1px solid #1e172b;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .sidebar-footer .avatar {
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            background: #2d2340;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            color: #a78bfa;
-        }
-        .sidebar-footer .user-info {
-            flex: 1;
-        }
-        .sidebar-footer .user-name {
-            font-size: 14px;
-            font-weight: 500;
-            color: #f0e8ff;
-        }
-        .sidebar-footer .user-status {
-            font-size: 11px;
-            color: #6a5e7e;
-        }
-        .sidebar-footer .menu-btn {
-            background: none;
-            border: none;
-            color: #6a5e7e;
-            font-size: 18px;
-            cursor: pointer;
-        }
-        .sidebar-footer .menu-btn:hover {
-            color: #d0c8e0;
-        }
-        .admin-only {
-            display: none;
-        }
-        .is-admin .admin-only {
-            display: inline-block;
-        }
-
-        /* MAIN */
-        .main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            background: #0f0c16;
-        }
-        .main-header {
-            padding: 12px 20px;
-            border-bottom: 1px solid #1a1425;
-            display: flex;
-            align-items: center;
-        }
-        .main-header .chat-title {
-            font-size: 16px;
-            font-weight: 500;
-        }
-        .main-header .spacer {
-            flex: 1;
-        }
-        .main-header button {
-            background: none;
-            border: none;
-            color: #6a5e7e;
-            font-size: 18px;
-            cursor: pointer;
-        }
-
-        /* CHAT */
-        .chat-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px 24px;
-        }
-        .empty-chat {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            text-align: center;
-        }
-        .hero h1 {
-            font-size: 30px;
-        }
-        .hero h1 span {
-            background: linear-gradient(135deg, #a78bfa, #7c3aed);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .hero p {
-            color: #8a7f9e;
-            font-size: 16px;
-            margin-top: 10px;
-        }
-
-        .message-row {
-            display: flex;
-            margin-bottom: 14px;
-        }
-        .message-row.user {
-            justify-content: flex-end;
-        }
-        .message {
-            max-width: 78%;
-        }
-        .message .bubble {
-            padding: 12px 16px;
-            border-radius: 16px;
-            font-size: 14px;
-            line-height: 1.6;
-            word-wrap: break-word;
-        }
-        .message-row.user .bubble {
-            background: linear-gradient(135deg, #7c3aed, #6d28d9);
-            color: #fff;
-            border-bottom-right-radius: 4px;
-        }
-        .message-row.assistant .bubble {
-            background: #1a1425;
-            border: 1px solid #2d2340;
-            color: #e8e0f0;
-            border-bottom-left-radius: 4px;
-        }
-        .msg-time {
-            font-size: 10px;
-            color: #4a4058;
-            margin-top: 4px;
-        }
-        .message-row.user .msg-time {
-            text-align: right;
-        }
-
-        /* TYPING */
-        .typing .bubble {
-            display: flex;
-            gap: 5px;
-            padding: 14px 20px;
-        }
-        .typing .dot {
-            width: 8px;
-            height: 8px;
-            background: #6a5e7e;
-            border-radius: 50%;
-            animation: dotBounce 1.2s infinite;
-        }
-        .typing .dot:nth-child(2) {
-            animation-delay: 0.2s;
-        }
-        .typing .dot:nth-child(3) {
-            animation-delay: 0.4s;
-        }
-        @keyframes dotBounce {
-            0%,
-            60%,
-            100% {
-                transform: translateY(0);
-                opacity: 0.3;
-            }
-            30% {
-                transform: translateY(-6px);
-                opacity: 1;
-            }
-        }
-
-        /* COMPOSER */
-        .composer {
-            padding: 10px 20px 14px;
-            border-top: 1px solid #1a1425;
-            display: flex;
-            gap: 10px;
-            align-items: flex-end;
-            background: #0f0c16;
-        }
-        .composer textarea {
-            flex: 1;
-            padding: 10px 16px;
-            background: #1a1425;
-            border: 1px solid #2d2340;
-            border-radius: 14px;
-            color: #f0e8ff;
-            font-size: 14px;
-            resize: none;
-            outline: none;
-            font-family: inherit;
-            min-height: 42px;
-            max-height: 120px;
-            line-height: 1.5;
-        }
-        .composer textarea:focus {
-            border-color: #7c3aed;
-        }
-        .composer button {
-            padding: 10px 18px;
-            background: linear-gradient(135deg, #7c3aed, #6d28d9);
-            border: none;
-            border-radius: 14px;
-            color: #fff;
-            font-size: 18px;
-            cursor: pointer;
-            height: 42px;
-            min-width: 48px;
-        }
-
         /* TOAST */
         #toast {
             position: fixed;
@@ -439,130 +153,127 @@
             transform: translateX(-50%) translateY(0);
         }
 
-        /* MODAL */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
+        /* APP */
+        #appView {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
+            height: 100vh;
+            width: 100vw;
         }
-        .modal-overlay.hidden {
+        #appView.hidden {
             display: none;
         }
-        .modal {
-            background: #14101e;
-            border: 1px solid #2d2340;
-            border-radius: 20px;
-            padding: 28px;
-            max-width: 420px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
+
+        .sidebar {
+            width: 240px;
+            background: #100d18;
+            border-right: 1px solid #201a2b;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
         }
-        .modal h2 {
-            color: #f0e8ff;
+        .sidebar .brand {
             font-size: 20px;
-            margin-bottom: 16px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a78bfa, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
         }
-        .modal .form-group {
-            margin-bottom: 12px;
+        .sidebar .user-info {
+            margin-top: auto;
+            padding-top: 16px;
+            border-top: 1px solid #1e172b;
         }
-        .modal .form-group label {
-            display: block;
-            font-size: 12px;
-            color: #b8aed0;
-            margin-bottom: 3px;
-        }
-        .modal .form-group input,
-        .modal .form-group textarea {
-            width: 100%;
-            padding: 10px 14px;
-            background: #1e172b;
-            border: 1px solid #2d2340;
-            border-radius: 10px;
-            color: #f0e8ff;
-            font-size: 14px;
-            outline: none;
-            font-family: inherit;
-        }
-        .modal .form-group input:focus,
-        .modal .form-group textarea:focus {
-            border-color: #7c3aed;
-        }
-        .modal .form-group textarea {
-            min-height: 70px;
-            resize: vertical;
-        }
-        .modal .modal-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 16px;
-        }
-        .modal .modal-actions button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 10px;
-            font-size: 14px;
+        .sidebar .user-info .name {
             font-weight: 500;
+        }
+        .sidebar .user-info .status {
+            font-size: 12px;
+            color: #6a5e7e;
+        }
+        .sidebar .logout-btn {
+            background: none;
+            border: none;
+            color: #ff6b7a;
             cursor: pointer;
-            flex: 1;
+            font-size: 14px;
+            margin-top: 8px;
         }
-        .modal .modal-actions .btn-primary {
-            background: linear-gradient(135deg, #7c3aed, #6d28d9);
-            color: #fff;
-        }
-        .modal .modal-actions .btn-secondary {
-            background: #1e172b;
-            color: #b8aed0;
-            border: 1px solid #2d2340;
-        }
-        .modal .error-text {
-            color: #f87171;
-            font-size: 12px;
-            margin-top: 6px;
-        }
-        .modal .avatar-upload {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-        .modal .avatar-upload img {
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2px solid #2d2340;
-        }
-        .modal .avatar-upload input[type="file"] {
-            padding: 6px;
-            font-size: 12px;
-            background: #1e172b;
-            border: 1px solid #2d2340;
-            border-radius: 8px;
-            color: #b8aed0;
+        .sidebar .logout-btn:hover {
+            color: #ff8ca4;
         }
 
-        @media (max-width: 768px) {
+        .main {
+            flex: 1;
+            padding: 20px 30px;
+            display: flex;
+            flex-direction: column;
+        }
+        .main .welcome {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .main .welcome span {
+            background: linear-gradient(135deg, #a78bfa, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .main .sub {
+            color: #8a7f9e;
+            font-size: 16px;
+        }
+        .main .info-box {
+            margin-top: 20px;
+            background: #1a1425;
+            border: 1px solid #2d2340;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .main .info-box h3 {
+            color: #a78bfa;
+            margin-bottom: 10px;
+        }
+        .main .info-box ul {
+            list-style: none;
+            padding: 0;
+        }
+        .main .info-box ul li {
+            padding: 6px 0;
+            color: #b8aed0;
+            font-size: 14px;
+            border-bottom: 1px solid #1e172b;
+        }
+        .main .info-box ul li:last-child {
+            border-bottom: none;
+        }
+        .main .info-box .badge {
+            background: rgba(124, 58, 237, 0.2);
+            color: #a78bfa;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        .admin-only {
+            display: none;
+        }
+        .is-admin .admin-only {
+            display: block;
+        }
+
+        @media (max-width: 600px) {
             .sidebar {
-                position: fixed;
-                left: -270px;
-                top: 0;
-                bottom: 0;
-                width: 250px;
-                z-index: 100;
-                transition: left 0.3s;
+                width: 180px;
+                padding: 14px;
             }
-            .sidebar.open {
-                left: 0;
+            .main {
+                padding: 14px 18px;
+            }
+            .main .welcome {
+                font-size: 22px;
             }
             .auth-box {
-                padding: 28px 20px;
+                padding: 24px 18px;
             }
         }
     </style>
@@ -571,7 +282,7 @@
 
     <div id="toast"></div>
 
-    <!-- AUTH -->
+    <!-- ===== AUTH ===== -->
     <div id="authView">
         <div class="auth-container">
             <div class="auth-box">
@@ -604,126 +315,42 @@
                 </form>
 
                 <div class="auth-switch">
-                    <button id="authSwitch" type="button">Hisobingiz yo‘qmi? Ro‘yxatdan o‘ting</button>
+                    <button id="authSwitch" type="button">Hisobingiz yo'qmi? Ro'yxatdan o'ting</button>
                 </div>
                 <div class="auth-footer">Qamir AI — siz bergan bilimlar va AI texnologiyasi asosida ishlaydi.</div>
             </div>
         </div>
     </div>
 
-    <!-- APP -->
+    <!-- ===== APP ===== -->
     <div id="appView" class="hidden">
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <span class="brand">✦ Qamir AI</span>
-            </div>
-            <div class="sidebar-actions">
-                <button id="newChat">+ Yangi suhbat</button>
-            </div>
-            <div class="sidebar-title">Suhbatlar</div>
-            <div class="chat-list" id="chatList"></div>
-            <div class="sidebar-footer">
-                <div class="avatar" id="topAvatar">◉</div>
-                <div class="user-info">
-                    <div class="user-name" id="topUsername">User</div>
-                    <div class="user-status" id="topStatus">Online</div>
-                </div>
-                <button class="menu-btn" id="topProfile" title="Profil">👤</button>
-                <button class="menu-btn admin-only" id="settingsBtn" title="Agent sozlamalari">⚙</button>
-                <button class="menu-btn" id="logoutBtn" title="Chiqish">🚪</button>
+        <div class="sidebar">
+            <div class="brand">✦ Qamir AI</div>
+            <div class="user-info">
+                <div class="name" id="appUsername">User</div>
+                <div class="status" id="appStatus">Online</div>
+                <button class="logout-btn" id="logoutBtn">🚪 Chiqish</button>
             </div>
         </div>
-
         <div class="main">
-            <div class="main-header">
-                <div class="chat-title">Qamir AI</div>
-                <div class="spacer"></div>
-                <button id="profileBtn" title="Profil">👤</button>
-            </div>
-            <div class="chat-container" id="chat"></div>
-            <div class="composer">
-                <textarea id="msg" rows="1" placeholder="Qamir AI'ga savolingizni yozing..."></textarea>
-                <button id="send">➤</button>
-            </div>
-        </div>
-    </div>
+            <div class="welcome">Salom, <span id="welcomeName">do'st</span> 👋</div>
+            <div class="sub">Qamir AI yordamchisi sizni kutmoqda.</div>
 
-    <!-- PROFILE MODAL -->
-    <div id="profileModal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2>👤 Profil</h2>
-            <div class="avatar-upload">
-                <img id="profileAvatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%232d2340'/%3E%3Ctext x='50' y='65' font-size='40' text-anchor='middle' fill='%23a78bfa' font-family='Arial'%3E◉%3C/text%3E%3C/svg%3E" alt="Avatar">
-                <label class="upload-btn">Rasm tanlash <input id="avatarFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
-            </div>
-            <div class="form-group">
-                <label>Login</label>
-                <input type="text" id="profileUsername" disabled>
-            </div>
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="profileEmail" placeholder="Email manzilingiz">
-            </div>
-            <div class="form-group">
-                <label>Tug'ilgan sana</label>
-                <input type="date" id="profileBirth">
-            </div>
-            <div class="form-group">
-                <label>Shahar</label>
-                <input type="text" id="profileCity" placeholder="Shahringiz">
-            </div>
-            <div class="form-group">
-                <label>Yangi parol</label>
-                <input type="password" id="profileNewPassword" placeholder="O'zgartirmasangiz bo'sh qoldiring">
-            </div>
-            <div id="profileError" class="error-text"></div>
-            <div class="modal-actions">
-                <button class="btn-primary" id="saveProfile">Saqlash</button>
-                <button class="btn-secondary" data-close="profileModal">Bekor</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- SETTINGS MODAL -->
-    <div id="settingsModal" class="modal-overlay hidden">
-        <div class="modal" style="max-width:500px;">
-            <h2>⚙ Agent boshqaruvi</h2>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #2d2340;padding-bottom:10px;margin-bottom:14px;">
-                <button class="tab active" data-tab="identity" style="padding:6px 14px;border:none;background:none;color:#8a7f9e;font-size:12px;cursor:pointer;border-radius:20px;">Shaxsiyat</button>
-                <button class="tab" data-tab="knowledge" style="padding:6px 14px;border:none;background:none;color:#8a7f9e;font-size:12px;cursor:pointer;border-radius:20px;">Bilimlar</button>
-                <button class="tab" data-tab="api" style="padding:6px 14px;border:none;background:none;color:#8a7f9e;font-size:12px;cursor:pointer;border-radius:20px;">AI / API</button>
-            </div>
-
-            <div class="tab-panel active" id="tab-identity">
-                <div class="form-group"><label>Agent nomi</label><input type="text" id="agentName" placeholder="Qamir"></div>
-                <div class="form-group"><label>Brend nomi</label><input type="text" id="brandName" placeholder="Qamir AI"></div>
-                <div class="form-group"><label>Rol</label><textarea id="agentRole" rows="3" placeholder="Agent roli..."></textarea></div>
-                <div class="form-group"><label>Asosiy ko'rsatma</label><textarea id="agentInstruction" rows="4" placeholder="Agent ko'rsatmasi..."></textarea></div>
-            </div>
-
-            <div class="tab-panel" id="tab-knowledge">
-                <div class="form-group"><label>Bilim matni</label><textarea id="knowledgeText" rows="4" placeholder="Savol: ...&#10;Ma'lumot: ..."></textarea></div>
-                <button id="addKnowledge" style="width:100%;padding:10px;background:linear-gradient(135deg,#7c3aed,#6d28d9);border:none;border-radius:10px;color:#fff;font-weight:600;cursor:pointer;">+ Bilim qo'shish</button>
-                <div id="knowledgeList" style="margin-top:12px;"></div>
-            </div>
-
-            <div class="tab-panel" id="tab-api">
-                <div class="form-group"><label>Gemini API kaliti</label><input type="password" id="apiKey" placeholder="AIza..."></div>
-                <div class="form-group"><label>Model</label><input type="text" id="apiModel" placeholder="gemini-2.5-flash"></div>
-                <div class="api-status"><span class="dot"></span><span id="apiStatusText">API sozlanmagan</span></div>
-            </div>
-
-            <div id="settingsError" class="error-text"></div>
-            <div class="modal-actions">
-                <button class="btn-primary" id="saveSettings">Saqlash</button>
-                <button class="btn-secondary" data-close="settingsModal">Yopish</button>
+            <div class="info-box">
+                <h3>📋 Ma'lumot</h3>
+                <ul>
+                    <li><strong>Foydalanuvchi:</strong> <span id="infoUsername">-</span></li>
+                    <li><strong>Email:</strong> <span id="infoEmail">-</span></li>
+                    <li><strong>Rol:</strong> <span id="infoRole" class="badge">User</span></li>
+                    <li class="admin-only"><strong>📚 Bilimlar soni:</strong> <span id="infoKnowledge">0</span></li>
+                </ul>
             </div>
         </div>
     </div>
 
     <script>
         // =====================================================
-        // QAMIR AI — TO'LIQ ISHLAYDI
+        // QAMIR AI — SODDA VA ISHLAYDI
         // Admin: Admin / Al-qamir
         // =====================================================
 
@@ -731,81 +358,84 @@
             "use strict";
 
             const $ = id => document.getElementById(id);
-
-            // ===== STORAGE =====
-            const KEY = "qamir_ai_v5";
+            const KEY = "qamir_ai_simple";
 
             // ===== DEFAULTS =====
-            const DEFAULTS = {
-                agentName: "Qamir",
-                brandName: "Qamir AI",
-                role: "Mijozlarga o'zbek tilida foydali yordam beradigan sun'iy intellekt yordamchisi.",
-                instruction: "Siz Qamir AI nomli professional yordamchisiz. Admin bergan bilimlardan foydalaning.",
-                knowledge: [],
-                users: [],
-                sessions: [],
-                currentSession: null,
-                currentUserId: null,
-                apiKey: "",
-                model: "gemini-2.5-flash"
-            };
+            function getDefaults() {
+                return {
+                    users: [],
+                    currentUserId: null,
+                    knowledge: []
+                };
+            }
 
-            // ===== LOAD STATE =====
+            // ===== LOAD =====
             function loadState() {
                 try {
-                    const data = JSON.parse(localStorage.getItem(KEY) || "null");
+                    const data = JSON.parse(localStorage.getItem(KEY));
                     if (data && typeof data === "object") {
                         return data;
                     }
                 } catch (e) {
-                    console.error("Load error:", e);
+                    console.log("Yangi state yaratilmoqda...");
                 }
-                return JSON.parse(JSON.stringify(DEFAULTS));
+                return getDefaults();
             }
 
             let state = loadState();
 
-            // ===== PERSIST =====
-            function persist() {
+            // ===== SAVE =====
+            function saveState() {
                 try {
                     localStorage.setItem(KEY, JSON.stringify(state));
+                    console.log("✅ Saqlandi:", state);
                 } catch (e) {
-                    console.error("Save error:", e);
-                    toast("Saqlashda muammo!");
+                    console.error("Saqlash xatosi:", e);
                 }
             }
 
-            // ===== HELPERS =====
-            function esc(s) {
-                return String(s || "")
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                    .replace(/"/g, "&quot;")
-                    .replace(/'/g, "&#039;")
-                    .replace(/\n/g, "<br>");
-            }
-
-            function now() {
-                const d = new Date();
-                return d.toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" }) +
-                    " • " + d.toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit", year: "numeric" });
-            }
-
-            function makeId() {
-                return "id_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
-            }
-
+            // ===== TOAST =====
             function toast(text) {
                 const el = $("toast");
                 if (!el) return;
                 el.textContent = text;
                 el.classList.add("show");
                 clearTimeout(toast.timer);
-                toast.timer = setTimeout(() => el.classList.remove("show"), 2600);
+                toast.timer = setTimeout(() => el.classList.remove("show"), 2500);
             }
 
-            // ===== ADMIN =====
+            // ===== ADMIN YARATISH =====
+            function ensureAdmin() {
+                // Admin borligini tekshirish
+                let admin = state.users.find(u => u.username === "Admin");
+
+                if (!admin) {
+                    admin = {
+                        id: "admin_" + Date.now(),
+                        username: "Admin",
+                        password: "Al-qamir",
+                        email: "admin@qamir.ai",
+                        role: "admin",
+                        createdAt: Date.now()
+                    };
+                    state.users.push(admin);
+                    saveState();
+                    console.log("✅ Admin yaratildi: Admin / Al-qamir");
+                    toast("✅ Admin yaratildi!");
+                }
+
+                // Agar parol bo'sh bo'lsa
+                if (!admin.password || admin.password === "") {
+                    admin.password = "Al-qamir";
+                    saveState();
+                }
+
+                return admin;
+            }
+
+            ensureAdmin();
+
+            // ===== CURRENT USER =====
             function currentUser() {
                 return state.users.find(u => u.id === state.currentUserId) || null;
             }
@@ -815,164 +445,191 @@
                 return u && u.username === "Admin";
             }
 
-            function ensureAdmin() {
-                let admin = state.users.find(u => u.username === "Admin");
-                if (!admin) {
-                    admin = {
-                        id: "admin_" + Date.now(),
-                        username: "Admin",
-                        password: "Al-qamir",
-                        email: "",
-                        birthDate: "",
-                        city: "",
-                        avatar: "",
-                        createdAt: Date.now()
-                    };
-                    state.users.push(admin);
-                    persist();
-                    console.log("✅ Admin yaratildi: Admin / Al-qamir");
-                }
-                if (!admin.password || admin.password === "") {
-                    admin.password = "Al-qamir";
-                    persist();
-                }
+            // ===== SHOW =====
+            function showAuth() {
+                if ($("authView")) $("authView").style.display = "flex";
+                if ($("appView")) $("appView").classList.add("hidden");
             }
 
-            ensureAdmin();
+            function showApp() {
+                if ($("authView")) $("authView").style.display = "none";
+                if ($("appView")) $("appView").classList.remove("hidden");
 
-            // ===== KNOWLEDGE =====
-            function findRelevantKnowledge(query, limit) {
-                limit = limit || 1;
-                const results = [];
-                state.knowledge.forEach(k => {
-                    const text = k.text || "";
-                    const score = text.toLowerCase().includes(query.toLowerCase()) ? 10 : 0;
-                    if (score > 0) {
-                        results.push({ knowledge: k, score: score });
+                const u = currentUser();
+                if (u) {
+                    if ($("appUsername")) $("appUsername").textContent = u.username;
+                    if ($("welcomeName")) $("welcomeName").textContent = u.username;
+                    if ($("infoUsername")) $("infoUsername").textContent = u.username;
+                    if ($("infoEmail")) $("infoEmail").textContent = u.email || "-";
+
+                    const roleEl = $("infoRole");
+                    if (roleEl) {
+                        roleEl.textContent = isAdmin() ? "Admin" : "User";
+                        roleEl.style.background = isAdmin() ? "rgba(124,58,237,0.3)" : "rgba(124,58,237,0.15)";
                     }
-                });
-                return results.sort((a, b) => b.score - a.score).slice(0, limit);
-            }
 
-            // ===== CALCULATOR =====
-            function calculatorAnswer(text) {
-                const nums = text.match(/(\d+)\s*([\+\-\*\/])\s*(\d+)/);
-                if (nums) {
-                    const a = Number(nums[1]);
-                    const op = nums[2];
-                    const b = Number(nums[3]);
-                    let result = 0;
-                    if (op === "+") result = a + b;
-                    else if (op === "-") result = a - b;
-                    else if (op === "*") result = a * b;
-                    else if (op === "/") result = a / b;
-                    return `${a} ${op} ${b} = ${result}`;
-                }
-                return null;
-            }
-
-            // ===== AI =====
-            async function getAIResponse(text) {
-                // Calculator
-                const calc = calculatorAnswer(text);
-                if (calc) return calc;
-
-                // Greeting
-                if (/^(salom|assalom|hello|hi|hay)\b/i.test(text)) {
-                    return "Salom! Men Qamir AI. Sizga qanday yordam beray? 😊";
-                }
-
-                // Knowledge
-                const matched = findRelevantKnowledge(text, 1);
-                if (matched.length > 0) {
-                    const k = matched[0].knowledge;
-                    const qa = k.text.split("\n");
-                    const answer = qa.find(line => line.toLowerCase().includes("ma'lumot") || line.toLowerCase().includes(
-                    "javob"));
-                    if (answer) {
-                        return answer.replace(/^(Ma'lumot|Javob)\s*:\s*/i, "").trim();
+                    if ($("infoKnowledge")) {
+                        $("infoKnowledge").textContent = state.knowledge.length;
                     }
-                    return k.text;
+
+                    document.body.classList.toggle("is-admin", isAdmin());
                 }
 
-                // API
-                const key = state.apiKey || "";
-                if (key) {
-                    try {
-                        const model = state.model || "gemini-2.5-flash";
-                        const res = await fetch(
-                            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-                            {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                    contents: [{ parts: [{ text: text }] }]
-                                })
-                            }
-                        );
-                        const data = await res.json();
-                        if (data && data.candidates && data.candidates[0]) {
-                            return data.candidates[0].content.parts[0].text || "Javob topilmadi.";
+                // Admin bilimlarni ko'rsatish
+                if (isAdmin() && state.knowledge.length > 0) {
+                    const list = document.querySelector(".info-box ul");
+                    if (list) {
+                        // Bilimlarni ko'rsatish
+                        const existing = list.querySelector(".knowledge-list");
+                        if (!existing) {
+                            const li = document.createElement("li");
+                            li.className = "knowledge-list";
+                            li.style.padding = "8px 0";
+                            li.innerHTML = "<strong>📚 Bilimlar:</strong><br>" +
+                                state.knowledge.map(k =>
+                                    `<span style="display:block;font-size:12px;color:#8a7f9e;padding:2px 0;">• ${k.text.slice(0, 60)}${k.text.length > 60 ? '...' : ''}</span>`
+                                ).join("");
+                            list.appendChild(li);
                         }
-                    } catch (e) {
-                        console.error("API error:", e);
                     }
                 }
-
-                return "Men Qamir AI — sizga yordam berishga tayyorman.\n\nBu savol bo'yicha hozircha bazamda ma'lumot yo'q.";
             }
 
-            // ===== SESSIONS =====
-            function userSessions() {
-                return state.sessions.filter(s => s.userId === state.currentUserId);
+            // ===== AUTH MODE =====
+            let authMode = "login";
+
+            function setAuthMode(mode) {
+                authMode = mode;
+                const reg = mode === "register";
+
+                if ($("authTitle")) $("authTitle").textContent = reg ? "Hisob yaratish" : "Xush kelibsiz";
+                if ($("authHint")) $("authHint").textContent = reg ? "Ro'yxatdan o'ting." : "Hisobingizga kiring.";
+                if ($("emailField")) $("emailField").classList.toggle("hidden", !reg);
+                if ($("confirmField")) $("confirmField").classList.toggle("hidden", !reg);
+                if ($("authSubmitText")) $("authSubmitText").textContent = reg ? "Ro'yxatdan o'tish" : "Kirish";
+                if ($("authSwitch")) $("authSwitch").textContent = reg ? "Hisobingiz bormi? Kirish" :
+                    "Hisobingiz yo'qmi? Ro'yxatdan o'ting";
+                if ($("authError")) $("authError").textContent = "";
             }
 
-            function activeSession() {
-                let s = state.sessions.find(x => x.id === state.currentSession && x.userId === state.currentUserId);
-                if (!s) {
-                    const list = userSessions();
-                    s = list[list.length - 1];
-                    if (!s) {
-                        s = {
-                            id: makeId(),
-                            userId: state.currentUserId,
-                            title: "Yangi suhbat",
-                            messages: [],
+            // ===== AUTH SWITCH =====
+            if ($("authSwitch")) {
+                $("authSwitch").onclick = () => {
+                    setAuthMode(authMode === "login" ? "register" : "login");
+                };
+            }
+
+            // ===== LOGIN / REGISTER =====
+            if ($("authForm")) {
+                $("authForm").onsubmit = function(e) {
+                    e.preventDefault();
+
+                    const username = $("authUsername").value.trim();
+                    const password = $("authPassword").value;
+                    const email = $("authEmail")?.value?.trim() || "";
+
+                    if ($("authError")) $("authError").textContent = "";
+
+                    // Validatsiya
+                    if (username.length < 3) {
+                        $("authError").textContent = "❌ Login kamida 3 belgi bo'lsin.";
+                        return;
+                    }
+                    if (password.length < 6) {
+                        $("authError").textContent = "❌ Parol kamida 6 belgi bo'lsin.";
+                        return;
+                    }
+
+                    // ===== REGISTER =====
+                    if (authMode === "register") {
+                        const confirm = $("authConfirm")?.value || "";
+                        if (password !== confirm) {
+                            $("authError").textContent = "❌ Parollar mos emas.";
+                            return;
+                        }
+
+                        // Login mavjudligini tekshirish
+                        if (state.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+                            $("authError").textContent = "❌ Bu login allaqachon mavjud.";
+                            return;
+                        }
+
+                        // Yangi user yaratish
+                        const user = {
+                            id: "user_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+                            username: username,
+                            password: password,
+                            email: email,
+                            role: "user",
                             createdAt: Date.now()
                         };
-                        state.sessions.push(s);
+
+                        state.users.push(user);
+                        state.currentUserId = user.id;
+                        saveState();
+
+                        toast("✅ Hisob yaratildi! Xush kelibsiz, " + username);
+                        showApp();
+                        return;
                     }
-                    state.currentSession = s.id;
-                    persist();
-                }
-                return s;
+
+                    // ===== LOGIN =====
+                    const user = state.users.find(u =>
+                        u.username.toLowerCase() === username.toLowerCase() &&
+                        u.password === password
+                    );
+
+                    if (!user) {
+                        $("authError").textContent = "❌ Login yoki parol noto'g'ri.";
+                        return;
+                    }
+
+                    state.currentUserId = user.id;
+                    saveState();
+                    toast("👋 Xush kelibsiz, " + user.username);
+                    showApp();
+                };
             }
 
-            // ===== RENDER =====
-            function renderSessions() {
-                const list = $("chatList");
-                if (!list) return;
-                const items = userSessions().slice().reverse();
-                list.innerHTML = items.length ? items.map(s =>
-                    `<div class="chat-item ${s.id === state.currentSession ? 'active' : ''}" data-session="${s.id}">${esc(s.title)}</div>`
-                ).join("") : '<div style="color:#625a6c;padding:10px;">Hozircha suhbat yo\'q</div>';
-
-                list.querySelectorAll("[data-session]").forEach(el => {
-                    el.onclick = () => {
-                        state.currentSession = el.dataset.session;
-                        persist();
-                        renderSessions();
-                        renderChat();
-                    };
-                });
+            // ===== LOGOUT =====
+            if ($("logoutBtn")) {
+                $("logoutBtn").onclick = () => {
+                    state.currentUserId = null;
+                    saveState();
+                    showAuth();
+                    setAuthMode("login");
+                    toast("Chiqildi.");
+                };
             }
 
-            function renderChat() {
-                const s = activeSession();
-                const chat = $("chat");
-                if (!chat) return;
+            // ===== BOSHLASH =====
+            console.log("🚀 Qamir AI ishga tushdi!");
+            console.log("👤 Users:", state.users);
+            console.log("🔑 Admin: Admin / Al-qamir");
 
-                if (!s.messages.length) {
-                    chat.innerHTML = `<div class="empty-chat">
-                        <div class="hero">
-                            <h
+            // Agar user login qilgan bo'lsa
+            if (state.currentUserId && currentUser()) {
+                showApp();
+            } else {
+                showAuth();
+                setAuthMode("login");
+            }
+
+            // ===== Konsolda yordam =====
+            console.log("📝 Qo'llanma:");
+            console.log("  - Admin: Admin / Al-qamir");
+            console.log("  - Yangi user: Ro'yxatdan o'ting");
+            console.log("  - localStorage: ", localStorage.getItem(KEY));
+
+            // Agar localStorage da hech narsa bo'lmasa
+            if (!localStorage.getItem(KEY)) {
+                console.warn("⚠️ localStorage bo'sh! Admin yaratilmoqda...");
+                ensureAdmin();
+                saveState();
+            }
+
+        })();
+    </script>
+
+</body>
+</html>
