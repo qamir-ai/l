@@ -2,7 +2,8 @@
   "use strict";
 
   const $ = id => document.getElementById(id);
-  const API = String(window.QAMIR_CONFIG?.API_BASE || "").replace(/\/+$/, "");
+  // API yo'lini to'g'ridan-to'g'ri bo'sh qilib qo'ydik, bu CORS xatosini yopadi
+  const API = ""; 
   const TOKEN_KEY = "qamir_auth_token_v3";
   const USER_KEY = "qamir_auth_user_v3";
 
