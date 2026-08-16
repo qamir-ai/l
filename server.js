@@ -27,7 +27,10 @@ async function db(sql, params = []) {
 }
 
 function hashPassword(password) {
-  return crypto.createHash("sha256").update(String(password)).digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(String(password))
+    .digest("hex");
 }
 
 function safeUser(row) {
@@ -119,20 +122,28 @@ async function initDb() {
     )
   `);
 
-  const setting = await db(`SELECT id FROM settings WHERE id = 1`);
+  const setting = await db(
+    `SELECT id FROM settings WHERE id = 1`
+  );
 
   if (!setting.length) {
-    await db(`INSERT INTO settings (id) VALUES (1)`);
+    await db(
+      `INSERT INTO settings (id) VALUES (1)`
+    );
   }
 
-  const adminPassword = process.env.ADMIN_PASSWORD || "Al-qamir";
-  const adminHash = hashPassword(adminPassword);
+  const adminPassword =
+    process.env.ADMIN_PASSWORD || "Al-qamir";
 
-  const adminRows = await db(
-    `SELECT id FROM users
-     WHERE LOWER(username) = 'admin'
-     LIMIT 1`
-  );
+  const adminHash =
+    hashPassword(adminPassword);
+
+  const adminRows =
+    await db(
+      `SELECT id FROM users
+       WHERE LOWER(username) = 'admin'
+       LIMIT 1`
+    );
 
   if (!adminRows.length) {
     await db(
@@ -159,70 +170,94 @@ async function initDb() {
 }
 
 function bearer(req) {
-  const h = req.headers.authorization || "";
-  return h.startsWith("Bearer ") ? h.slice(7) : "";
+  const h =
+    req.headers.authorization || "";
+
+  return h.startsWith("Bearer ")
+    ? h.slice(7)
+    : "";
 }
 
 async function userFromRequest(req) {
   const token = bearer(req);
+
   if (!token) return null;
 
   const id = Number(token);
 
-  if (!Number.isSafeInteger(id) || id <= 0) {
+  if (
+    !Number.isSafeInteger(id) ||
+    id <= 0
+  ) {
     return null;
   }
 
-  const rows = await db(
-    `SELECT id, username, email, birth_date, city, avatar,
-            is_admin, created_at, last_seen
-     FROM users
-     WHERE id = $1
-     LIMIT 1`,
-    [id]
-  );
+  const rows =
+    await db(
+      `SELECT id, username, email, birth_date, city, avatar,
+              is_admin, created_at, last_seen
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
 
   return rows[0] || null;
 }
 
 async function requireUser(req, res, next) {
   try {
-    const user = await userFromRequest(req);
+    const user =
+      await userFromRequest(req);
 
     if (!user) {
       return res.status(401).json({
-        error: "Kirish talab qilinadi"
+        error:
+          "Kirish talab qilinadi"
       });
     }
 
     req.user = user;
     next();
   } catch (e) {
-    console.error("AUTH ERROR:", e);
+    console.error(
+      "AUTH ERROR:",
+      e
+    );
 
     res.status(500).json({
-      error: "Server xatosi"
+      error:
+        "Server xatosi"
     });
   }
 }
 
 async function requireAdmin(req, res, next) {
   try {
-    const user = await userFromRequest(req);
+    const user =
+      await userFromRequest(req);
 
-    if (!user || !user.is_admin) {
+    if (
+      !user ||
+      !user.is_admin
+    ) {
       return res.status(403).json({
-        error: "Faqat Admin uchun"
+        error:
+          "Faqat Admin uchun"
       });
     }
 
     req.user = user;
     next();
   } catch (e) {
-    console.error("ADMIN ERROR:", e);
+    console.error(
+      "ADMIN ERROR:",
+      e
+    );
 
     res.status(500).json({
-      error: "Server xatosi"
+      error:
+        "Server xatosi"
     });
   }
 }
@@ -299,7 +334,8 @@ const STOP_WORDS = new Set([
 ]);
 
 function stem(word) {
-  let w = String(word || "");
+  let w =
+    String(word || "");
 
   if (!w) return "";
 
@@ -326,75 +362,134 @@ function stem(word) {
     "men"
   ];
 
-  for (const suffix of suffixes) {
-    if (w.length > suffix.length + 2 && w.endsWith(suffix)) {
-      w = w.slice(0, -suffix.length);
+  for (
+    const suffix
+    of suffixes
+  ) {
+    if (
+      w.length >
+        suffix.length + 2 &&
+      w.endsWith(suffix)
+    ) {
+      w =
+        w.slice(
+          0,
+          -suffix.length
+        );
+
       break;
     }
   }
 
-  if (w === "worddan" || w === "word" || w === "vord") {
+  if (
+    w === "worddan" ||
+    w === "word" ||
+    w === "vord"
+  ) {
     return "word";
   }
 
-  if (w === "eksel" || w === "excel") {
+  if (
+    w === "eksel" ||
+    w === "excel"
+  ) {
     return "excel";
   }
 
-  if (w === "powerpoint" || w === "ppt") {
+  if (
+    w === "powerpoint" ||
+    w === "ppt"
+  ) {
     return "powerpoint";
   }
 
-  if (w === "telegram") {
+  if (
+    w === "telegram"
+  ) {
     return "telegram";
   }
 
-  if (w === "instagram" || w === "insta") {
+  if (
+    w === "instagram" ||
+    w === "insta"
+  ) {
     return "instagram";
   }
 
-  if (w === "telefon" || w === "tel") {
+  if (
+    w === "telefon" ||
+    w === "tel"
+  ) {
     return "telefon";
   }
 
   return w;
 }
 
-function tokenize(text, options = {}) {
-  const removeStop = options.removeStop !== false;
+function tokenize(
+  text,
+  options = {}
+) {
+  const removeStop =
+    options.removeStop !== false;
 
-  return [...new Set(
-    normalize(text)
-      .split(/\s+/)
-      .map(stem)
-      .filter(w => w.length >= 2)
-      .filter(w => !removeStop || !STOP_WORDS.has(w))
-  )];
+  return [
+    ...new Set(
+      normalize(text)
+        .split(/\s+/)
+        .map(stem)
+        .filter(
+          w => w.length >= 2
+        )
+        .filter(
+          w =>
+            !removeStop ||
+            !STOP_WORDS.has(w)
+        )
+    )
+  ];
 }
 
 function tokenizeRaw(text) {
-  return [...new Set(
-    normalize(text)
-      .split(/\s+/)
-      .map(stem)
-      .filter(Boolean)
-  )];
+  return [
+    ...new Set(
+      normalize(text)
+        .split(/\s+/)
+        .map(stem)
+        .filter(Boolean)
+    )
+  ];
 }
 
-function phraseIncludes(text, phrase) {
-  const a = ` ${normalize(text)} `;
-  const b = ` ${normalize(phrase)} `;
+function phraseIncludes(
+  text,
+  phrase
+) {
+  const a =
+    ` ${normalize(text)} `;
+
+  const b =
+    ` ${normalize(phrase)} `;
 
   return a.includes(b);
 }
 
-function overlapCount(queryWords, targetText) {
-  const targetWords = tokenizeRaw(targetText);
-  const set = new Set(targetWords);
+function overlapCount(
+  queryWords,
+  targetText
+) {
+  const targetWords =
+    tokenizeRaw(targetText);
+
+  const set =
+    new Set(targetWords);
 
   let count = 0;
 
-  for (const q of queryWords) {
+  for (
+    const q
+    of queryWords
+  ) {
     if (set.has(q)) {
       count++;
       continue;
@@ -402,10 +497,11 @@ function overlapCount(queryWords, targetText) {
 
     if (
       q.length >= 4 &&
-      targetWords.some(t =>
-        t === q ||
-        t.startsWith(q) ||
-        q.startsWith(t)
+      targetWords.some(
+        t =>
+          t === q ||
+          t.startsWith(q) ||
+          q.startsWith(t)
       )
     ) {
       count++;
@@ -415,51 +511,91 @@ function overlapCount(queryWords, targetText) {
   return count;
 }
 
-function extractAlternativeQuestions(rawText) {
-  const text = String(rawText || "");
+function extractAlternativeQuestions(
+  rawText
+) {
+  const text =
+    String(rawText || "");
 
-  const m = text.match(
-    /Muqobil\s+savollar\s*:\s*([\s\S]*?)(?=\n\s*Javob\s*:|$)/i
-  );
+  const m =
+    text.match(
+      /Muqobil\s+savollar\s*:\s*([\s\S]*?)(?=\n\s*Javob\s*:|$)/i
+    );
 
   if (!m) return [];
 
   return m[1]
     .split(/[;|]/)
-    .map(x => x.trim())
+    .map(
+      x => x.trim()
+    )
     .filter(Boolean);
 }
 
-function levenshtein(a, b) {
+function levenshtein(
+  a,
+  b
+) {
   if (a === b) return 0;
   if (!a.length) return b.length;
   if (!b.length) return a.length;
 
-  if (Math.abs(a.length - b.length) > 2) {
+  if (
+    Math.abs(
+      a.length - b.length
+    ) > 2
+  ) {
     return 99;
   }
 
-  const prev = new Array(b.length + 1);
-  const cur = new Array(b.length + 1);
+  const prev =
+    new Array(
+      b.length + 1
+    );
 
-  for (let j = 0; j <= b.length; j++) {
+  const cur =
+    new Array(
+      b.length + 1
+    );
+
+  for (
+    let j = 0;
+    j <= b.length;
+    j++
+  ) {
     prev[j] = j;
   }
 
-  for (let i = 1; i <= a.length; i++) {
+  for (
+    let i = 1;
+    i <= a.length;
+    i++
+  ) {
     cur[0] = i;
 
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+    for (
+      let j = 1;
+      j <= b.length;
+      j++
+    ) {
+      const cost =
+        a[i - 1] === b[j - 1]
+          ? 0
+          : 1;
 
-      cur[j] = Math.min(
-        cur[j - 1] + 1,
-        prev[j] + 1,
-        prev[j - 1] + cost
-      );
+      cur[j] =
+        Math.min(
+          cur[j - 1] + 1,
+          prev[j] + 1,
+          prev[j - 1] + cost
+        );
     }
 
-    for (let j = 0; j <= b.length; j++) {
+    for (
+      let j = 0;
+      j <= b.length;
+      j++
+    ) {
       prev[j] = cur[j];
     }
   }
@@ -467,24 +603,49 @@ function levenshtein(a, b) {
   return prev[b.length];
 }
 
-function scoreKnowledge(query, item) {
-  const normalizedQuery = normalize(query);
-  const qWords = tokenize(query, {
-    removeStop: true
-  });
+function scoreKnowledge(
+  query,
+  item
+) {
+  const normalizedQuery =
+    normalize(query);
 
-  if (!normalizedQuery || !qWords.length) {
+  const qWords =
+    tokenize(query, {
+      removeStop: true
+    });
+
+  if (
+    !normalizedQuery ||
+    !qWords.length
+  ) {
     return 0;
   }
 
-  const question = normalize(item.question || "");
-  const title = normalize(item.title || "");
-  const answer = normalize(item.answer || "");
-  const rawText = normalize(item.raw_text || "");
+  const question =
+    normalize(
+      item.question || ""
+    );
 
-  const alternatives = extractAlternativeQuestions(
-    item.raw_text || ""
-  );
+  const title =
+    normalize(
+      item.title || ""
+    );
+
+  const answer =
+    normalize(
+      item.answer || ""
+    );
+
+  const rawText =
+    normalize(
+      item.raw_text || ""
+    );
+
+  const alternatives =
+    extractAlternativeQuestions(
+      item.raw_text || ""
+    );
 
   let score = 0;
 
@@ -495,46 +656,91 @@ function scoreKnowledge(query, item) {
     score += 180;
   }
 
-  for (const alt of alternatives) {
-    const altNorm = normalize(alt);
+  for (
+    const alt
+    of alternatives
+  ) {
+    const altNorm =
+      normalize(alt);
 
-    if (normalizedQuery === altNorm) {
+    if (
+      normalizedQuery === altNorm
+    ) {
       score += 180;
     } else if (
-      phraseIncludes(normalizedQuery, alt) ||
-      phraseIncludes(alt, normalizedQuery)
+      phraseIncludes(
+        normalizedQuery,
+        alt
+      ) ||
+      phraseIncludes(
+        alt,
+        normalizedQuery
+      )
     ) {
       score += 130;
     }
   }
 
-  const questionHits = overlapCount(qWords, question);
-  const titleHits = overlapCount(qWords, title);
+  const questionHits =
+    overlapCount(
+      qWords,
+      question
+    );
 
-  const altHits = alternatives.reduce(
-    (best, alt) =>
-      Math.max(best, overlapCount(qWords, alt)),
-    0
-  );
+  const titleHits =
+    overlapCount(
+      qWords,
+      title
+    );
 
-  const strongestHits = Math.max(
-    questionHits,
-    titleHits,
-    altHits
-  );
+  const altHits =
+    alternatives.reduce(
+      (best, alt) =>
+        Math.max(
+          best,
+          overlapCount(
+            qWords,
+            alt
+          )
+        ),
+      0
+    );
 
-  const queryCount = Math.max(qWords.length, 1);
-  const coverage = strongestHits / queryCount;
+  const strongestHits =
+    Math.max(
+      questionHits,
+      titleHits,
+      altHits
+    );
 
-  score += questionHits * 32;
-  score += titleHits * 20;
-  score += altHits * 45;
+  const queryCount =
+    Math.max(
+      qWords.length,
+      1
+    );
+
+  const coverage =
+    strongestHits /
+    queryCount;
+
+  score +=
+    questionHits * 32;
+
+  score +=
+    titleHits * 20;
+
+  score +=
+    altHits * 45;
 
   if (
     question &&
     (
-      normalizedQuery.includes(question) ||
-      question.includes(normalizedQuery)
+      normalizedQuery.includes(
+        question
+      ) ||
+      question.includes(
+        normalizedQuery
+      )
     )
   ) {
     score += 110;
@@ -542,19 +748,44 @@ function scoreKnowledge(query, item) {
 
   if (
     title &&
-    normalizedQuery.includes(title)
+    normalizedQuery.includes(
+      title
+    )
   ) {
     score += 80;
   }
 
-  const answerHits = overlapCount(qWords, answer);
-  const rawHits = overlapCount(qWords, rawText);
+  const answerHits =
+    overlapCount(
+      qWords,
+      answer
+    );
 
-  score += Math.min(answerHits, 2) * 2;
-  score += Math.min(rawHits, 2);
+  const rawHits =
+    overlapCount(
+      qWords,
+      rawText
+    );
 
-  for (const q of qWords) {
-    if (q.length < 4) continue;
+  score +=
+    Math.min(
+      answerHits,
+      2
+    ) * 2;
+
+  score +=
+    Math.min(
+      rawHits,
+      2
+    );
+
+  for (
+    const q
+    of qWords
+  ) {
+    if (q.length < 4) {
+      continue;
+    }
 
     const candidates = [
       question,
@@ -565,9 +796,13 @@ function scoreKnowledge(query, item) {
       .split(/\s+/);
 
     if (
-      candidates.some(c =>
-        c.length >= 4 &&
-        levenshtein(q, c) <= 1
+      candidates.some(
+        c =>
+          c.length >= 4 &&
+          levenshtein(
+            q,
+            c
+          ) <= 1
       )
     ) {
       score += 8;
@@ -591,37 +826,63 @@ function scoreKnowledge(query, item) {
   return Math.round(score);
 }
 
-async function findKnowledge(query, limit = 8) {
-  const rows = await db(`
-    SELECT
-      id,
-      title,
-      question,
-      answer,
-      raw_text,
-      type,
-      enabled
-    FROM knowledge
-    WHERE enabled = TRUE
-    ORDER BY id DESC
-  `);
+async function findKnowledge(
+  query,
+  limit = 8
+) {
+  const rows =
+    await db(`
+      SELECT
+        id,
+        title,
+        question,
+        answer,
+        raw_text,
+        type,
+        enabled
+      FROM knowledge
+      WHERE enabled = TRUE
+      ORDER BY id DESC
+    `);
 
   return rows
-    .map(item => ({
-      ...item,
-      score: scoreKnowledge(query, item)
-    }))
-    .filter(item => item.score >= 55)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .map(
+      item => ({
+        ...item,
+        score:
+          scoreKnowledge(
+            query,
+            item
+          )
+      })
+    )
+    .filter(
+      item =>
+        item.score >= 55
+    )
+    .sort(
+      (a, b) =>
+        b.score - a.score
+    )
+    .slice(
+      0,
+      limit
+    );
 }
 
-function chooseKnowledgeAnswer(matches) {
-  if (!matches.length) return null;
+function chooseKnowledgeAnswer(
+  matches
+) {
+  if (!matches.length) {
+    return null;
+  }
 
-  const best = matches[0];
+  const best =
+    matches[0];
 
-  if (best.score >= 120) {
+  if (
+    best.score >= 120
+  ) {
     return best;
   }
 
@@ -632,12 +893,16 @@ function chooseKnowledgeAnswer(matches) {
     return best;
   }
 
-  if (best.score >= 75) {
-    const second = matches[1];
+  if (
+    best.score >= 75
+  ) {
+    const second =
+      matches[1];
 
     if (
       !second ||
-      best.score - second.score >= 15
+      best.score -
+        second.score >= 15
     ) {
       return best;
     }
@@ -651,45 +916,107 @@ function chooseKnowledgeAnswer(matches) {
 // ============================================================
 
 function getUzbekistanDateTime() {
-  const now = new Date();
+  const now =
+    new Date();
 
-  const dateParts = new Intl.DateTimeFormat("uz-UZ", {
-    timeZone: "Asia/Tashkent",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(now);
+  const dateParts =
+    new Intl.DateTimeFormat(
+      "uz-UZ",
+      {
+        timeZone:
+          "Asia/Tashkent",
+        year:
+          "numeric",
+        month:
+          "2-digit",
+        day:
+          "2-digit"
+      }
+    ).formatToParts(
+      now
+    );
 
-  const timeParts = new Intl.DateTimeFormat("uz-UZ", {
-    timeZone: "Asia/Tashkent",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false
-  }).formatToParts(now);
+  const timeParts =
+    new Intl.DateTimeFormat(
+      "uz-UZ",
+      {
+        timeZone:
+          "Asia/Tashkent",
+        hour:
+          "2-digit",
+        minute:
+          "2-digit",
+        second:
+          "2-digit",
+        hour12:
+          false
+      }
+    ).formatToParts(
+      now
+    );
 
-  const weekday = new Intl.DateTimeFormat("uz-UZ", {
-    timeZone: "Asia/Tashkent",
-    weekday: "long"
-  }).format(now);
+  const weekday =
+    new Intl.DateTimeFormat(
+      "uz-UZ",
+      {
+        timeZone:
+          "Asia/Tashkent",
+        weekday:
+          "long"
+      }
+    ).format(now);
 
-  function part(parts, type) {
-    return parts.find(x => x.type === type)?.value || "";
+  function part(
+    parts,
+    type
+  ) {
+    return (
+      parts.find(
+        x => x.type === type
+      )?.value || ""
+    );
   }
 
   return {
-    year: part(dateParts, "year"),
-    month: part(dateParts, "month"),
-    day: part(dateParts, "day"),
-    hour: part(timeParts, "hour"),
-    minute: part(timeParts, "minute"),
-    second: part(timeParts, "second"),
+    year:
+      part(
+        dateParts,
+        "year"
+      ),
+    month:
+      part(
+        dateParts,
+        "month"
+      ),
+    day:
+      part(
+        dateParts,
+        "day"
+      ),
+    hour:
+      part(
+        timeParts,
+        "hour"
+      ),
+    minute:
+      part(
+        timeParts,
+        "minute"
+      ),
+    second:
+      part(
+        timeParts,
+        "second"
+      ),
     weekday
   };
 }
 
-function getDateTimeAnswer(text) {
-  const q = normalize(text);
+function getDateTimeAnswer(
+  text
+) {
+  const q =
+    normalize(text);
 
   const datePatterns = [
     "bugun nechi",
@@ -713,42 +1040,56 @@ function getDateTimeAnswer(text) {
   ];
 
   const asksDate =
-    datePatterns.some(pattern =>
-      q.includes(pattern)
+    datePatterns.some(
+      pattern =>
+        q.includes(pattern)
     );
 
   const asksTime =
-    timePatterns.some(pattern =>
-      q.includes(pattern)
+    timePatterns.some(
+      pattern =>
+        q.includes(pattern)
     );
 
-  if (!asksDate && !asksTime) {
+  if (
+    !asksDate &&
+    !asksTime
+  ) {
     return null;
   }
 
   const d =
     getUzbekistanDateTime();
 
-  if (asksTime && !asksDate) {
+  if (
+    asksTime &&
+    !asksDate
+  ) {
     return {
       answer:
         `Hozir O‘zbekiston vaqti bilan soat ${d.hour}:${d.minute}:${d.second}.`,
-      source: "date_time"
+      source:
+        "date_time"
     };
   }
 
-  if (asksDate && asksTime) {
+  if (
+    asksDate &&
+    asksTime
+  ) {
     return {
       answer:
         `Bugun ${d.day}.${d.month}.${d.year}, ${d.weekday}. Hozir soat ${d.hour}:${d.minute}:${d.second}.`,
-      source: "date_time"
+      source:
+        "date_time"
     };
   }
 
   return {
     answer:
       `Bugun ${d.day}.${d.month}.${d.year}, ${d.weekday}.`,
-    source: "date_time"
+    source:
+      "date_time"
   };
 }
 
@@ -756,24 +1097,39 @@ function getDateTimeAnswer(text) {
 // WIKIPEDIA
 // ============================================================
 
-function cleanWikipediaQuery(text) {
-  let q = String(text || "")
-    .trim()
-    .replace(/[?!.]+$/g, "")
-    .replace(
-      /\b(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi)\b/gi,
-      " "
-    )
-    .replace(/\s+/g, " ")
-    .trim();
+function cleanWikipediaQuery(
+  text
+) {
+  let q =
+    String(text || "")
+      .trim()
+      .replace(
+        /[?!.]+$/g,
+        ""
+      )
+      .replace(
+        /\b(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi)\b/gi,
+        " "
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim();
 
   return q;
 }
 
-function looksLikeWikipediaQuestion(text) {
-  const q = normalize(text);
+function looksLikeWikipediaQuestion(
+  text
+) {
+  const q =
+    normalize(text);
 
-  if (!q || q.length < 2) {
+  if (
+    !q ||
+    q.length < 2
+  ) {
     return false;
   }
 
@@ -792,87 +1148,196 @@ function looksLikeWikipediaQuestion(text) {
     /\bqayerda tugilgan\b/i
   ];
 
-  return explicitPatterns.some(pattern =>
-    pattern.test(q)
+  return explicitPatterns.some(
+    pattern =>
+      pattern.test(q)
   );
 }
 
-function cleanWikipediaHtml(text) {
+function cleanWikipediaHtml(
+  text
+) {
   return String(text || "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<span[^>]*>/gi, "")
-    .replace(/<\/span>/gi, "")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#160;/g, " ")
-    .replace(/\s+\n/g, "\n")
-    .replace(/\n\s+/g, "\n")
-    .replace(/[ \t]+/g, " ")
+    .replace(
+      /<br\s*\/?>/gi,
+      "\n"
+    )
+    .replace(
+      /<span[^>]*>/gi,
+      ""
+    )
+    .replace(
+      /<\/span>/gi,
+      ""
+    )
+    .replace(
+      /<[^>]*>/g,
+      ""
+    )
+    .replace(
+      /&quot;/g,
+      '"'
+    )
+    .replace(
+      /&#039;/g,
+      "'"
+    )
+    .replace(
+      /&#39;/g,
+      "'"
+    )
+    .replace(
+      /&amp;/g,
+      "&"
+    )
+    .replace(
+      /&lt;/g,
+      "<"
+    )
+    .replace(
+      /&gt;/g,
+      ">"
+    )
+    .replace(
+      /&#160;/g,
+      " "
+    )
+    .replace(
+      /\s+\n/g,
+      "\n"
+    )
+    .replace(
+      /\n\s+/g,
+      "\n"
+    )
+    .replace(
+      /[ \t]+/g,
+      " "
+    )
     .trim();
 }
 
-function scoreWikipediaTitle(query, title) {
-  const qWords = tokenizeRaw(query)
-    .filter(w => w.length >= 2);
+function scoreWikipediaTitle(
+  query,
+  title
+) {
+  const qWords =
+    tokenizeRaw(query)
+      .filter(
+        w => w.length >= 2
+      );
 
-  const tWords = tokenizeRaw(title)
-    .filter(w => w.length >= 2);
+  const tWords =
+    tokenizeRaw(title)
+      .filter(
+        w => w.length >= 2
+      );
 
-  if (!qWords.length || !tWords.length) {
+  if (
+    !qWords.length ||
+    !tWords.length
+  ) {
     return 0;
   }
 
   let score = 0;
   let matched = 0;
 
-  for (const qw of qWords) {
+  for (
+    const qw
+    of qWords
+  ) {
     let best = 0;
 
-    for (const tw of tWords) {
-      if (qw === tw) {
-        best = Math.max(best, 100);
+    for (
+      const tw
+      of tWords
+    ) {
+      if (
+        qw === tw
+      ) {
+        best =
+          Math.max(
+            best,
+            100
+          );
       } else if (
         qw.startsWith(tw) ||
         tw.startsWith(qw)
       ) {
-        best = Math.max(best, 72);
+        best =
+          Math.max(
+            best,
+            72
+          );
       } else {
-        const distance = levenshtein(qw, tw);
+        const distance =
+          levenshtein(
+            qw,
+            tw
+          );
 
-        if (distance === 1) {
-          best = Math.max(best, 65);
-        } else if (distance === 2) {
-          best = Math.max(best, 48);
-        } else if (distance === 3) {
-          best = Math.max(best, 25);
+        if (
+          distance === 1
+        ) {
+          best =
+            Math.max(
+              best,
+              65
+            );
+        } else if (
+          distance === 2
+        ) {
+          best =
+            Math.max(
+              best,
+              48
+            );
+        } else if (
+          distance === 3
+        ) {
+          best =
+            Math.max(
+              best,
+              25
+            );
         }
       }
     }
 
-    if (best > 0) {
+    if (
+      best > 0
+    ) {
       matched++;
       score += best;
     }
   }
 
   const coverage =
-    matched / Math.max(qWords.length, 1);
+    matched /
+    Math.max(
+      qWords.length,
+      1
+    );
 
-  score += coverage * 80;
+  score +=
+    coverage * 80;
 
-  if (normalize(title) === normalize(query)) {
+  if (
+    normalize(title) ===
+    normalize(query)
+  ) {
     score += 250;
   }
 
   return score;
 }
 
-async function wikipediaSearchRaw(language, query, limit = 10) {
+async function wikipediaSearchRaw(
+  language,
+  query,
+  limit = 10
+) {
   const base =
     `https://${language}.wikipedia.org`;
 
@@ -882,28 +1347,43 @@ async function wikipediaSearchRaw(language, query, limit = 10) {
     `&list=search` +
     `&srsearch=${encodeURIComponent(query)}` +
     `&srnamespace=0` +
-    `&srlimit=${Math.min(50, Math.max(1, limit))}` +
+    `&srlimit=${Math.min(
+      50,
+      Math.max(1, limit)
+    )}` +
     `&srprop=snippet|titlesnippet|sectiontitle|categorysnippet` +
     `&format=json` +
     `&formatversion=2` +
     `&origin=*`;
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "User-Agent":
-        "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
-      "Api-User-Agent":
-        "QamirAI/1.0 (Qamir AI personal assistant)"
-    }
-  });
+  const response =
+    await fetch(
+      url,
+      {
+        method: "GET",
+        headers: {
+          "User-Agent":
+            "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
+          "Api-User-Agent":
+            "QamirAI/1.0 (Qamir AI personal assistant)"
+        }
+      }
+    );
 
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
+    const body =
+      await response
+        .text()
+        .catch(
+          () => ""
+        );
 
     console.error(
       `Wikipedia ${language} HTTP ${response.status}:`,
-      body.slice(0, 500)
+      body.slice(
+        0,
+        500
+      )
     );
 
     return {
@@ -913,22 +1393,37 @@ async function wikipediaSearchRaw(language, query, limit = 10) {
   }
 
   const data =
-    await response.json().catch(() => ({}));
+    await response
+      .json()
+      .catch(
+        () => ({})
+      );
 
   const pages =
-    Array.isArray(data?.query?.search)
-      ? data.query.search.map(item => ({
-          title: item?.title || "",
-          pageid: item?.pageid || null,
-          snippet: cleanWikipediaHtml(
-            item?.snippet || ""
-          )
-        }))
+    Array.isArray(
+      data?.query?.search
+    )
+      ? data.query.search.map(
+          item => ({
+            title:
+              item?.title ||
+              "",
+            pageid:
+              item?.pageid ||
+              null,
+            snippet:
+              cleanWikipediaHtml(
+                item?.snippet ||
+                ""
+              )
+          })
+        )
       : [];
 
   const suggestion =
     String(
-      data?.query?.searchinfo?.suggestion ||
+      data?.query?.searchinfo
+        ?.suggestion ||
       ""
     ).trim();
 
@@ -938,7 +1433,10 @@ async function wikipediaSearchRaw(language, query, limit = 10) {
   };
 }
 
-async function wikipediaGetPage(language, title) {
+async function wikipediaGetPage(
+  language,
+  title
+) {
   const base =
     `https://${language}.wikipedia.org`;
 
@@ -956,32 +1454,50 @@ async function wikipediaGetPage(language, title) {
     `&formatversion=2` +
     `&origin=*`;
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "User-Agent":
-        "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
-      "Api-User-Agent":
-        "QamirAI/1.0 (Qamir AI personal assistant)"
-    }
-  });
+  const response =
+    await fetch(
+      url,
+      {
+        method: "GET",
+        headers: {
+          "User-Agent":
+            "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
+          "Api-User-Agent":
+            "QamirAI/1.0 (Qamir AI personal assistant)"
+        }
+      }
+    );
 
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
+    const body =
+      await response
+        .text()
+        .catch(
+          () => ""
+        );
 
     console.error(
       `Wikipedia page ${language} HTTP ${response.status}:`,
-      body.slice(0, 500)
+      body.slice(
+        0,
+        500
+      )
     );
 
     return null;
   }
 
   const data =
-    await response.json().catch(() => ({}));
+    await response
+      .json()
+      .catch(
+        () => ({})
+      );
 
   const page =
-    Array.isArray(data?.query?.pages)
+    Array.isArray(
+      data?.query?.pages
+    )
       ? data.query.pages[0]
       : null;
 
@@ -994,7 +1510,8 @@ async function wikipediaGetPage(language, title) {
 
   const extract =
     cleanWikipediaHtml(
-      page.extract || ""
+      page.extract ||
+      ""
     );
 
   if (!extract) {
@@ -1003,30 +1520,48 @@ async function wikipediaGetPage(language, title) {
 
   return {
     title:
-      String(page.title || title).trim(),
+      String(
+        page.title ||
+        title
+      ).trim(),
     extract,
     url:
-      String(page.fullurl || "").trim()
+      String(
+        page.fullurl ||
+        ""
+      ).trim()
   };
 }
 
-function makeWikipediaVariants(query, suggestion = "") {
+function makeWikipediaVariants(
+  query,
+  suggestion = ""
+) {
   const variants = [];
   const seen = new Set();
 
   function add(value) {
-    const v = String(value || "")
-      .trim()
-      .replace(/\s+/g, " ");
+    const v =
+      String(value || "")
+        .trim()
+        .replace(
+          /\s+/g,
+          " "
+        );
 
     if (
       v.length < 2 ||
-      seen.has(v.toLowerCase())
+      seen.has(
+        v.toLowerCase()
+      )
     ) {
       return;
     }
 
-    seen.add(v.toLowerCase());
+    seen.add(
+      v.toLowerCase()
+    );
+
     variants.push(v);
   }
 
@@ -1035,20 +1570,35 @@ function makeWikipediaVariants(query, suggestion = "") {
 
   const wordsList =
     tokenizeRaw(query)
-      .filter(w => w.length >= 3);
+      .filter(
+        w => w.length >= 3
+      );
 
-  if (wordsList.length > 1) {
-    add(wordsList.join(" "));
+  if (
+    wordsList.length > 1
+  ) {
+    add(
+      wordsList.join(" ")
+    );
   }
 
-  for (const word of wordsList) {
+  for (
+    const word
+    of wordsList
+  ) {
     add(word);
   }
 
-  return variants.slice(0, 8);
+  return variants.slice(
+    0,
+    8
+  );
 }
 
-async function fetchWikipediaFromLanguage(language, query) {
+async function fetchWikipediaFromLanguage(
+  language,
+  query
+) {
   try {
     console.log(
       `Wikipedia qidiruvi [${language}]:`,
@@ -1099,7 +1649,13 @@ async function fetchWikipediaFromLanguage(language, query) {
     if (
       allPages.length < 3
     ) {
-      for (const variant of variants.slice(0, 5)) {
+      for (
+        const variant
+        of variants.slice(
+          0,
+          5
+        )
+      ) {
         if (
           normalize(variant) ===
           normalize(query)
@@ -1128,11 +1684,17 @@ async function fetchWikipediaFromLanguage(language, query) {
     }
 
     const uniquePages = [];
-    const seenTitles = new Set();
+    const seenTitles =
+      new Set();
 
-    for (const item of allPages) {
+    for (
+      const item
+      of allPages
+    ) {
       const title =
-        String(item?.title || "").trim();
+        String(
+          item?.title || ""
+        ).trim();
 
       const titleKey =
         normalize(title);
@@ -1140,26 +1702,39 @@ async function fetchWikipediaFromLanguage(language, query) {
       if (
         !title ||
         !titleKey ||
-        seenTitles.has(titleKey)
+        seenTitles.has(
+          titleKey
+        )
       ) {
         continue;
       }
 
-      seenTitles.add(titleKey);
-      uniquePages.push(item);
+      seenTitles.add(
+        titleKey
+      );
+
+      uniquePages.push(
+        item
+      );
     }
 
-    if (!uniquePages.length) {
+    if (
+      !uniquePages.length
+    ) {
       return null;
     }
 
     let bestPage = null;
     let bestScore = -1;
 
-    for (const candidate of uniquePages) {
+    for (
+      const candidate
+      of uniquePages
+    ) {
       const title =
         String(
-          candidate?.title || ""
+          candidate?.title ||
+          ""
         ).trim();
 
       const score =
@@ -1205,10 +1780,14 @@ async function fetchWikipediaFromLanguage(language, query) {
 
     return {
       language,
-      title: page.title,
-      description: "",
-      extract: page.extract,
-      url: page.url
+      title:
+        page.title,
+      description:
+        "",
+      extract:
+        page.extract,
+      url:
+        page.url
     };
 
   } catch (error) {
@@ -1221,13 +1800,21 @@ async function fetchWikipediaFromLanguage(language, query) {
   }
 }
 
-async function searchWikipedia(userText) {
-  if (!looksLikeWikipediaQuestion(userText)) {
+async function searchWikipedia(
+  userText
+) {
+  if (
+    !looksLikeWikipediaQuestion(
+      userText
+    )
+  ) {
     return null;
   }
 
   const query =
-    cleanWikipediaQuery(userText);
+    cleanWikipediaQuery(
+      userText
+    );
 
   if (
     !query ||
@@ -1262,27 +1849,43 @@ async function searchWikipedia(userText) {
 // ADVANCED CALCULATOR
 // ============================================================
 
-function formatNumber(value) {
-  if (Object.is(value, -0)) {
+function formatNumber(
+  value
+) {
+  if (
+    Object.is(
+      value,
+      -0
+    )
+  ) {
     value = 0;
   }
 
-  if (Number.isInteger(value)) {
+  if (
+    Number.isInteger(value)
+  ) {
     return String(value);
   }
 
   return Number(
     value.toFixed(12)
-  ).toLocaleString("uz-UZ", {
-    maximumFractionDigits: 12,
-    useGrouping: false
-  });
+  ).toLocaleString(
+    "uz-UZ",
+    {
+      maximumFractionDigits: 12,
+      useGrouping: false
+    }
+  );
 }
 
 function factorial(n) {
   n = Number(n);
 
-  if (!Number.isInteger(n) || n < 0 || n > 170) {
+  if (
+    !Number.isInteger(n) ||
+    n < 0 ||
+    n > 170
+  ) {
     throw new Error(
       "Faktorial uchun 0 dan 170 gacha butun son kerak."
     );
@@ -1290,7 +1893,11 @@ function factorial(n) {
 
   let result = 1;
 
-  for (let i = 2; i <= n; i++) {
+  for (
+    let i = 2;
+    i <= n;
+    i++
+  ) {
     result *= i;
   }
 
@@ -1298,28 +1905,55 @@ function factorial(n) {
 }
 
 function degToRad(x) {
-  return x * Math.PI / 180;
+  return (
+    x *
+    Math.PI /
+    180
+  );
 }
 
 function radToDeg(x) {
-  return x * 180 / Math.PI;
+  return (
+    x *
+    180 /
+    Math.PI
+  );
 }
 
-function normalizeMathQuestion(text) {
+function normalizeMathQuestion(
+  text
+) {
   let q =
     String(text || "")
       .trim()
       .toLowerCase()
-      .replace(/[ʻ’‘`´]/g, "")
-      .replace(/[−–—]/g, "-")
-      .replace(/[×✕]/g, "*")
-      .replace(/÷/g, "/")
-      .replace(/\s+/g, " ");
+      .replace(
+        /[ʻ’‘`´]/g,
+        ""
+      )
+      .replace(
+        /[−–—]/g,
+        "-"
+      )
+      .replace(
+        /[×✕]/g,
+        "*"
+      )
+      .replace(
+        /÷/g,
+        "/"
+      )
+      .replace(
+        /\s+/g,
+        " "
+      );
 
   const hasFunctionArguments =
     /[a-zA-Z]+\s*\([^)]*,/.test(q);
 
-  if (!hasFunctionArguments) {
+  if (
+    !hasFunctionArguments
+  ) {
     q =
       q.replace(
         /(\d)\s*,\s*(\d)/g,
@@ -1330,21 +1964,37 @@ function normalizeMathQuestion(text) {
   return q;
 }
 
-function calculatePercentage(text) {
-  const q = normalizeMathQuestion(text)
-    .replace(/\?+$/g, "")
-    .trim();
+function calculatePercentage(
+  text
+) {
+  const q =
+    normalizeMathQuestion(
+      text
+    )
+      .replace(
+        /\?+$/g,
+        ""
+      )
+      .trim();
 
   let m;
 
-  m = q.match(
-    /^(-?\d+(?:\.\d+)?)\s*ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s*(?:qancha|necha|bo'ladi|boladi)?$/i
-  );
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s*ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s*(?:qancha|necha|bo'ladi|boladi)?$/i
+    );
 
   if (m) {
-    const base = Number(m[1]);
-    const percent = Number(m[2]);
-    const result = base * percent / 100;
+    const base =
+      Number(m[1]);
+
+    const percent =
+      Number(m[2]);
+
+    const result =
+      base *
+      percent /
+      100;
 
     return {
       answer:
@@ -1353,14 +2003,22 @@ function calculatePercentage(text) {
     };
   }
 
-  m = q.match(
-    /^(?:hisobla|hisoblab\s+ber|top|aniqla)\s+(-?\d+(?:\.\d+)?)\s*ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)$/i
-  );
+  m =
+    q.match(
+      /^(?:hisobla|hisoblab\s+ber|top|aniqla)\s+(-?\d+(?:\.\d+)?)\s*ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)$/i
+    );
 
   if (m) {
-    const base = Number(m[1]);
-    const percent = Number(m[2]);
-    const result = base * percent / 100;
+    const base =
+      Number(m[1]);
+
+    const percent =
+      Number(m[2]);
+
+    const result =
+      base *
+      percent /
+      100;
 
     return {
       answer:
@@ -1369,14 +2027,22 @@ function calculatePercentage(text) {
     };
   }
 
-  m = q.match(
-    /^(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s+(?:ning\s+)?(-?\d+(?:\.\d+)?)(?:\s+dan)?$/i
-  );
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s+(?:ning\s+)?(-?\d+(?:\.\d+)?)(?:\s+dan)?$/i
+    );
 
   if (m) {
-    const percent = Number(m[1]);
-    const base = Number(m[2]);
-    const result = base * percent / 100;
+    const percent =
+      Number(m[1]);
+
+    const base =
+      Number(m[2]);
+
+    const result =
+      base *
+      percent /
+      100;
 
     return {
       answer:
@@ -1385,14 +2051,22 @@ function calculatePercentage(text) {
     };
   }
 
-  m = q.match(
-    /^(-?\d+(?:\.\d+)?)\s*%\s*(?:of|dan|ning)\s*(-?\d+(?:\.\d+)?)$/i
-  );
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s*%\s*(?:of|dan|ning)\s*(-?\d+(?:\.\d+)?)$/i
+    );
 
   if (m) {
-    const percent = Number(m[1]);
-    const base = Number(m[2]);
-    const result = base * percent / 100;
+    const percent =
+      Number(m[1]);
+
+    const base =
+      Number(m[2]);
+
+    const result =
+      base *
+      percent /
+      100;
 
     return {
       answer:
@@ -1401,14 +2075,25 @@ function calculatePercentage(text) {
     };
   }
 
-  m = q.match(
-    /^(-?\d+(?:\.\d+)?)\s+dan\s+(-?\d+(?:\.\d+)?)\s*%\s*(?:ayir|ayirish|kamaytir|kamaytirish)$/i
-  );
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s+dan\s+(-?\d+(?:\.\d+)?)\s*%\s*(?:ayir|ayirish|kamaytir|kamaytirish)$/i
+    );
 
   if (m) {
-    const base = Number(m[1]);
-    const percent = Number(m[2]);
-    const result = base - (base * percent / 100);
+    const base =
+      Number(m[1]);
+
+    const percent =
+      Number(m[2]);
+
+    const result =
+      base -
+      (
+        base *
+        percent /
+        100
+      );
 
     return {
       answer:
@@ -1417,14 +2102,25 @@ function calculatePercentage(text) {
     };
   }
 
-  m = q.match(
-    /^(-?\d+(?:\.\d+)?)\s+ga\s+(-?\d+(?:\.\d+)?)\s*%\s*(?:qo'sh|qosh|qo'shish|qoshish|oshir|oshirish)$/i
-  );
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s+ga\s+(-?\d+(?:\.\d+)?)\s*%\s*(?:qo'sh|qosh|qo'shish|qoshish|oshir|oshirish)$/i
+    );
 
   if (m) {
-    const base = Number(m[1]);
-    const percent = Number(m[2]);
-    const result = base + (base * percent / 100);
+    const base =
+      Number(m[1]);
+
+    const percent =
+      Number(m[2]);
+
+    const result =
+      base +
+      (
+        base *
+        percent /
+        100
+      );
 
     return {
       answer:
@@ -1433,15 +2129,25 @@ function calculatePercentage(text) {
     };
   }
 
-  m = q.match(
-    /^(-?\d+(?:\.\d+)?)\s*([+-])\s*(-?\d+(?:\.\d+)?)\s*%$/
-  );
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s*([+-])\s*(-?\d+(?:\.\d+)?)\s*%$/
+    );
 
   if (m) {
-    const base = Number(m[1]);
-    const op = m[2];
-    const percent = Number(m[3]);
-    const delta = base * percent / 100;
+    const base =
+      Number(m[1]);
+
+    const op =
+      m[2];
+
+    const percent =
+      Number(m[3]);
+
+    const delta =
+      base *
+      percent /
+      100;
 
     const result =
       op === "+"
@@ -1458,68 +2164,112 @@ function calculatePercentage(text) {
   return null;
 }
 
-function tokenizeMathExpression(expression) {
+function tokenizeMathExpression(
+  expression
+) {
   const tokens = [];
   let i = 0;
 
-  while (i < expression.length) {
-    const ch = expression[i];
+  while (
+    i <
+    expression.length
+  ) {
+    const ch =
+      expression[i];
 
     if (/\s/.test(ch)) {
       i++;
       continue;
     }
 
-    if (/[0-9.]/.test(ch)) {
-      const start = i;
+    if (
+      /[0-9.]/.test(ch)
+    ) {
+      const start =
+        i;
+
       let dotCount = 0;
 
       while (
-        i < expression.length &&
-        /[0-9.]/.test(expression[i])
+        i <
+          expression.length &&
+        /[0-9.]/.test(
+          expression[i]
+        )
       ) {
-        if (expression[i] === ".") {
+        if (
+          expression[i] ===
+          "."
+        ) {
           dotCount++;
         }
 
         i++;
       }
 
-      const raw = expression.slice(start, i);
+      const raw =
+        expression.slice(
+          start,
+          i
+        );
 
-      if (dotCount > 1 || raw === ".") {
-        throw new Error("Noto‘g‘ri son");
+      if (
+        dotCount > 1 ||
+        raw === "."
+      ) {
+        throw new Error(
+          "Noto‘g‘ri son"
+        );
       }
 
-      const value = Number(raw);
+      const value =
+        Number(raw);
 
-      if (!Number.isFinite(value)) {
-        throw new Error("Noto‘g‘ri son");
+      if (
+        !Number.isFinite(
+          value
+        )
+      ) {
+        throw new Error(
+          "Noto‘g‘ri son"
+        );
       }
 
       tokens.push({
-        type: "number",
+        type:
+          "number",
         value
       });
 
       continue;
     }
 
-    if (/[a-zA-Z]/.test(ch)) {
-      const start = i;
+    if (
+      /[a-zA-Z]/.test(ch)
+    ) {
+      const start =
+        i;
 
       while (
-        i < expression.length &&
-        /[a-zA-Z]/.test(expression[i])
+        i <
+          expression.length &&
+        /[a-zA-Z]/.test(
+          expression[i]
+        )
       ) {
         i++;
       }
 
       tokens.push({
-        type: "identifier",
-        value: expression
-          .slice(start, i)
-          .toLowerCase()
+        type:
+          "identifier",
+        value:
+          expression
+            .slice(
+              start,
+              i
+            )
+            .toLowerCase()
       });
 
       continue;
@@ -1554,47 +2304,103 @@ function tokenizeMathExpression(expression) {
   return tokens;
 }
 
-function evaluateAdvancedExpression(expression) {
+function evaluateAdvancedExpression(
+  expression
+) {
   const tokens =
-    tokenizeMathExpression(expression);
+    tokenizeMathExpression(
+      expression
+    );
 
   let pos = 0;
 
   const constants = {
-    pi: Math.PI,
-    e: Math.E
+    pi:
+      Math.PI,
+    e:
+      Math.E
   };
 
   const functions = {
-    sqrt: x => Math.sqrt(x),
-    abs: x => Math.abs(x),
-    floor: x => Math.floor(x),
-    ceil: x => Math.ceil(x),
-    round: x => Math.round(x),
+    sqrt:
+      x => Math.sqrt(x),
 
-    sin: x => Math.sin(degToRad(x)),
-    cos: x => Math.cos(degToRad(x)),
-    tan: x => Math.tan(degToRad(x)),
+    abs:
+      x => Math.abs(x),
 
-    asin: x => radToDeg(Math.asin(x)),
-    acos: x => radToDeg(Math.acos(x)),
-    atan: x => radToDeg(Math.atan(x)),
+    floor:
+      x => Math.floor(x),
 
-    ln: x => Math.log(x),
-    log: x => Math.log10(x),
-    exp: x => Math.exp(x),
+    ceil:
+      x => Math.ceil(x),
 
-    pow: (a, b) => Math.pow(a, b),
-    min: (...args) => Math.min(...args),
-    max: (...args) => Math.max(...args),
+    round:
+      x => Math.round(x),
 
-    fact: factorial
+    sin:
+      x => Math.sin(
+        degToRad(x)
+      ),
+
+    cos:
+      x => Math.cos(
+        degToRad(x)
+      ),
+
+    tan:
+      x => Math.tan(
+        degToRad(x)
+      ),
+
+    asin:
+      x => radToDeg(
+        Math.asin(x)
+      ),
+
+    acos:
+      x => radToDeg(
+        Math.acos(x)
+      ),
+
+    atan:
+      x => radToDeg(
+        Math.atan(x)
+      ),
+
+    ln:
+      x => Math.log(x),
+
+    log:
+      x => Math.log10(x),
+
+    exp:
+      x => Math.exp(x),
+
+    pow:
+      (a, b) =>
+        Math.pow(a, b),
+
+    min:
+      (...args) =>
+        Math.min(...args),
+
+    max:
+      (...args) =>
+        Math.max(...args),
+
+    fact:
+      factorial
   };
 
-  function ensureFinite(value) {
+  function ensureFinite(
+    value
+  ) {
     if (
-      typeof value !== "number" ||
-      !Number.isFinite(value)
+      typeof value !==
+        "number" ||
+      !Number.isFinite(
+        value
+      )
     ) {
       throw new Error(
         "Matematik natija yaroqsiz"
@@ -1605,77 +2411,120 @@ function evaluateAdvancedExpression(expression) {
   }
 
   function parseExpression() {
-    let value = parseTerm();
+    let value =
+      parseTerm();
 
     while (
-      pos < tokens.length &&
+      pos <
+        tokens.length &&
       (
-        tokens[pos].type === "+" ||
-        tokens[pos].type === "-"
+        tokens[pos].type ===
+          "+" ||
+        tokens[pos].type ===
+          "-"
       )
     ) {
-      const op = tokens[pos++].type;
-      const right = parseTerm();
+      const op =
+        tokens[pos++].type;
+
+      const right =
+        parseTerm();
 
       value =
         op === "+"
           ? value + right
           : value - right;
 
-      ensureFinite(value);
+      ensureFinite(
+        value
+      );
     }
 
     return value;
   }
 
   function parseTerm() {
-    let value = parsePower();
+    let value =
+      parsePower();
 
     while (
-      pos < tokens.length &&
+      pos <
+        tokens.length &&
       (
-        tokens[pos].type === "*" ||
-        tokens[pos].type === "/" ||
-        tokens[pos].type === "%"
+        tokens[pos].type ===
+          "*" ||
+        tokens[pos].type ===
+          "/" ||
+        tokens[pos].type ===
+          "%"
       )
     ) {
-      const op = tokens[pos++].type;
-      const right = parsePower();
+      const op =
+        tokens[pos++].type;
 
-      if (op === "/" || op === "%") {
-        if (right === 0) {
+      const right =
+        parsePower();
+
+      if (
+        op === "/" ||
+        op === "%"
+      ) {
+        if (
+          right === 0
+        ) {
           throw new Error(
             "0 ga bo‘lish mumkin emas"
           );
         }
       }
 
-      if (op === "*") {
-        value *= right;
-      } else if (op === "/") {
-        value /= right;
+      if (
+        op === "*"
+      ) {
+        value *=
+          right;
+      } else if (
+        op === "/"
+      ) {
+        value /=
+          right;
       } else {
-        value %= right;
+        value %=
+          right;
       }
 
-      ensureFinite(value);
+      ensureFinite(
+        value
+      );
     }
 
     return value;
   }
 
   function parsePower() {
-    let value = parseUnary();
+    let value =
+      parseUnary();
 
     if (
-      pos < tokens.length &&
-      tokens[pos].type === "^"
+      pos <
+        tokens.length &&
+      tokens[pos].type ===
+        "^"
     ) {
       pos++;
-      const right = parsePower();
 
-      value = Math.pow(value, right);
-      ensureFinite(value);
+      const right =
+        parsePower();
+
+      value =
+        Math.pow(
+          value,
+          right
+        );
+
+      ensureFinite(
+        value
+      );
     }
 
     return value;
@@ -1683,45 +2532,75 @@ function evaluateAdvancedExpression(expression) {
 
   function parseUnary() {
     if (
-      pos < tokens.length &&
-      tokens[pos].type === "+"
+      pos <
+        tokens.length &&
+      tokens[pos].type ===
+        "+"
     ) {
       pos++;
+
       return parseUnary();
     }
 
     if (
-      pos < tokens.length &&
-      tokens[pos].type === "-"
+      pos <
+        tokens.length &&
+      tokens[pos].type ===
+        "-"
     ) {
       pos++;
-      return ensureFinite(-parseUnary());
+
+      return ensureFinite(
+        -parseUnary()
+      );
     }
 
     return parsePostfix();
   }
 
   function parsePostfix() {
-    let value = parsePrimary();
+    let value =
+      parsePrimary();
 
-    while (pos < tokens.length) {
-      if (tokens[pos].type === "!") {
+    while (
+      pos <
+      tokens.length
+    ) {
+      if (
+        tokens[pos].type ===
+        "!"
+      ) {
         pos++;
-        value = factorial(value);
+
+        value =
+          factorial(
+            value
+          );
+
         continue;
       }
 
-      if (tokens[pos].type === "%") {
-        const next = tokens[pos + 1];
+      if (
+        tokens[pos].type ===
+        "%"
+      ) {
+        const next =
+          tokens[pos + 1];
 
         if (
           !next ||
-          next.type === ")" ||
-          next.type === "+" ||
-          next.type === "-"
+          next.type ===
+            ")" ||
+          next.type ===
+            "+" ||
+          next.type ===
+            "-"
         ) {
           pos++;
-          value /= 100;
+
+          value /=
+            100;
+
           continue;
         }
       }
@@ -1729,11 +2608,16 @@ function evaluateAdvancedExpression(expression) {
       break;
     }
 
-    return ensureFinite(value);
+    return ensureFinite(
+      value
+    );
   }
 
   function parsePrimary() {
-    if (pos >= tokens.length) {
+    if (
+      pos >=
+      tokens.length
+    ) {
       throw new Error(
         "Ifoda tugallanmagan"
       );
@@ -1743,14 +2627,17 @@ function evaluateAdvancedExpression(expression) {
       tokens[pos];
 
     if (
-      token.type === "number"
+      token.type ===
+      "number"
     ) {
       pos++;
+
       return token.value;
     }
 
     if (
-      token.type === "identifier"
+      token.type ===
+      "identifier"
     ) {
       pos++;
 
@@ -1758,31 +2645,44 @@ function evaluateAdvancedExpression(expression) {
         token.value;
 
       if (
-        pos < tokens.length &&
-        tokens[pos].type === "("
+        pos <
+          tokens.length &&
+        tokens[pos].type ===
+          "("
       ) {
         pos++;
 
         const args = [];
 
         if (
-          pos < tokens.length &&
-          tokens[pos].type !== ")"
+          pos <
+            tokens.length &&
+          tokens[pos].type !==
+            ")"
         ) {
-          args.push(parseExpression());
+          args.push(
+            parseExpression()
+          );
 
           while (
-            pos < tokens.length &&
-            tokens[pos].type === ","
+            pos <
+              tokens.length &&
+            tokens[pos].type ===
+              ","
           ) {
             pos++;
-            args.push(parseExpression());
+
+            args.push(
+              parseExpression()
+            );
           }
         }
 
         if (
-          pos >= tokens.length ||
-          tokens[pos].type !== ")"
+          pos >=
+            tokens.length ||
+          tokens[pos].type !==
+            ")"
         ) {
           throw new Error(
             "Funksiya qavsi yopilmagan"
@@ -1807,36 +2707,53 @@ function evaluateAdvancedExpression(expression) {
 
         let result;
 
-        if (name === "pow") {
-          if (args.length !== 2) {
+        if (
+          name ===
+          "pow"
+        ) {
+          if (
+            args.length !== 2
+          ) {
             throw new Error(
               "pow(a,b) ikkita qiymat oladi"
             );
           }
 
-          result = fn(args[0], args[1]);
+          result =
+            fn(
+              args[0],
+              args[1]
+            );
         } else if (
           name === "min" ||
           name === "max"
         ) {
-          if (!args.length) {
+          if (
+            !args.length
+          ) {
             throw new Error(
               `${name}() kamida bitta qiymat oladi`
             );
           }
 
-          result = fn(...args);
+          result =
+            fn(...args);
         } else {
-          if (args.length !== 1) {
+          if (
+            args.length !== 1
+          ) {
             throw new Error(
               `${name}() bitta qiymat oladi`
             );
           }
 
-          result = fn(args[0]);
+          result =
+            fn(args[0]);
         }
 
-        return ensureFinite(result);
+        return ensureFinite(
+          result
+        );
       }
 
       if (
@@ -1854,7 +2771,8 @@ function evaluateAdvancedExpression(expression) {
     }
 
     if (
-      token.type === "("
+      token.type ===
+      "("
     ) {
       pos++;
 
@@ -1862,8 +2780,10 @@ function evaluateAdvancedExpression(expression) {
         parseExpression();
 
       if (
-        pos >= tokens.length ||
-        tokens[pos].type !== ")"
+        pos >=
+          tokens.length ||
+        tokens[pos].type !==
+          ")"
       ) {
         throw new Error(
           "Qavslar noto‘g‘ri"
@@ -1884,21 +2804,34 @@ function evaluateAdvancedExpression(expression) {
     parseExpression();
 
   if (
-    pos !== tokens.length
+    pos !==
+    tokens.length
   ) {
     throw new Error(
       "Ifodaning bir qismi tushunilmadi"
     );
   }
 
-  return ensureFinite(result);
+  return ensureFinite(
+    result
+  );
 }
 
-function solveQuadratic(text) {
+function solveQuadratic(
+  text
+) {
   let q =
-    normalizeMathQuestion(text)
-      .replace(/x²/g, "x^2")
-      .replace(/\s+/g, "");
+    normalizeMathQuestion(
+      text
+    )
+      .replace(
+        /x²/g,
+        "x^2"
+      )
+      .replace(
+        /\s+/g,
+        ""
+      );
 
   if (
     !q.includes("=") ||
@@ -1916,11 +2849,19 @@ function solveQuadratic(text) {
     return null;
   }
 
-  function parsePolynomial(poly) {
+  function parsePolynomial(
+    poly
+  ) {
     let clean =
       poly
-        .replace(/\(/g, "")
-        .replace(/\)/g, "");
+        .replace(
+          /\(/g,
+          ""
+        )
+        .replace(
+          /\)/g,
+          ""
+        );
 
     clean =
       clean.replace(
@@ -1944,7 +2885,10 @@ function solveQuadratic(text) {
     let b = 0;
     let c = 0;
 
-    for (let term of terms) {
+    for (
+      let term
+      of terms
+    ) {
       term =
         term.replace(
           /\*/g,
@@ -2012,43 +2956,61 @@ function solveQuadratic(text) {
       ) {
         c +=
           Number(term);
+
         continue;
       }
 
       return null;
     }
 
-    return { a, b, c };
+    return {
+      a,
+      b,
+      c
+    };
   }
 
   const left =
-    parsePolynomial(parts[0]);
+    parsePolynomial(
+      parts[0]
+    );
 
   const right =
-    parsePolynomial(parts[1]);
+    parsePolynomial(
+      parts[1]
+    );
 
-  if (!left || !right) {
+  if (
+    !left ||
+    !right
+  ) {
     return null;
   }
 
   const a =
-    left.a - right.a;
+    left.a -
+    right.a;
 
   const b =
-    left.b - right.b;
+    left.b -
+    right.b;
 
   const c =
-    left.c - right.c;
+    left.c -
+    right.c;
 
   if (
-    Math.abs(a) < 1e-12 &&
-    Math.abs(b) < 1e-12
+    Math.abs(a) <
+      1e-12 &&
+    Math.abs(b) <
+      1e-12
   ) {
     return null;
   }
 
   if (
-    Math.abs(a) < 1e-12
+    Math.abs(a) <
+    1e-12
   ) {
     const x =
       -c / b;
@@ -2060,17 +3022,25 @@ function solveQuadratic(text) {
   }
 
   const D =
-    b * b - 4 * a * c;
+    b * b -
+    4 *
+      a *
+      c;
 
   if (
     D < 0
   ) {
     const real =
-      -b / (2 * a);
+      -b /
+      (2 * a);
 
     const imaginary =
-      Math.sqrt(-D) /
-      Math.abs(2 * a);
+      Math.sqrt(
+        -D
+      ) /
+      Math.abs(
+        2 * a
+      );
 
     return {
       answer:
@@ -2083,10 +3053,12 @@ function solveQuadratic(text) {
   }
 
   if (
-    Math.abs(D) < 1e-12
+    Math.abs(D) <
+    1e-12
   ) {
     const x =
-      -b / (2 * a);
+      -b /
+      (2 * a);
 
     return {
       answer:
@@ -2099,11 +3071,17 @@ function solveQuadratic(text) {
     Math.sqrt(D);
 
   const x1 =
-    (-b + sqrtD) /
+    (
+      -b +
+      sqrtD
+    ) /
     (2 * a);
 
   const x2 =
-    (-b - sqrtD) /
+    (
+      -b -
+      sqrtD
+    ) /
     (2 * a);
 
   return {
@@ -2114,9 +3092,13 @@ function solveQuadratic(text) {
   };
 }
 
-function derivativePolynomial(text) {
+function derivativePolynomial(
+  text
+) {
   const q =
-    normalizeMathQuestion(text);
+    normalizeMathQuestion(
+      text
+    );
 
   if (
     !q.includes("d/dx") &&
@@ -2165,15 +3147,27 @@ function derivativePolynomial(text) {
     return null;
   }
 
-  const resultTerms = [];
+  const resultTerms =
+    [];
 
-  for (const originalTerm of terms) {
+  for (
+    const originalTerm
+    of terms
+  ) {
     const term =
       originalTerm
-        .replace(/\*/g, "");
+        .replace(
+          /\*/g,
+          ""
+        );
 
-    if (term === "x") {
-      resultTerms.push("1");
+    if (
+      term === "x"
+    ) {
+      resultTerms.push(
+        "1"
+      );
+
       continue;
     }
 
@@ -2210,7 +3204,9 @@ function derivativePolynomial(text) {
         power - 1;
 
       if (
-        Math.abs(newPower) < 1e-12
+        Math.abs(
+          newPower
+        ) < 1e-12
       ) {
         resultTerms.push(
           formatNumber(
@@ -2258,9 +3254,7 @@ function derivativePolynomial(text) {
       }
 
       resultTerms.push(
-        formatNumber(
-          coef
-        )
+        formatNumber(coef)
       );
 
       continue;
@@ -2277,7 +3271,9 @@ function derivativePolynomial(text) {
     return null;
   }
 
-  if (!resultTerms.length) {
+  if (
+    !resultTerms.length
+  ) {
     return {
       answer:
         "Hosila: 0"
@@ -2298,25 +3294,28 @@ function derivativePolynomial(text) {
   };
 }
 
-function definitePolynomialIntegral(text) {
+function definitePolynomialIntegral(
+  text
+) {
   const q =
-    normalizeMathQuestion(text);
+    normalizeMathQuestion(
+      text
+    );
 
   if (
-    !q.includes("integral") &&
+    !q.includes(
+      "integral"
+    ) &&
     !q.includes("∫")
   ) {
     return null;
   }
 
-  let expression =
-    "";
+  let expression = "";
 
-  let lower =
-    null;
+  let lower = null;
 
-  let upper =
-    null;
+  let upper = null;
 
   let match =
     q.match(
@@ -2325,10 +3324,14 @@ function definitePolynomialIntegral(text) {
 
   if (match) {
     lower =
-      Number(match[1]);
+      Number(
+        match[1]
+      );
 
     upper =
-      Number(match[2]);
+      Number(
+        match[2]
+      );
 
     expression =
       match[3];
@@ -2348,18 +3351,26 @@ function definitePolynomialIntegral(text) {
         match[1];
 
       lower =
-        Number(match[2]);
+        Number(
+          match[2]
+        );
 
       upper =
-        Number(match[3]);
+        Number(
+          match[3]
+        );
     }
   }
 
   if (
     lower === null ||
     upper === null ||
-    !Number.isFinite(lower) ||
-    !Number.isFinite(upper) ||
+    !Number.isFinite(
+      lower
+    ) ||
+    !Number.isFinite(
+      upper
+    ) ||
     !expression
   ) {
     return null;
@@ -2382,11 +3393,15 @@ function definitePolynomialIntegral(text) {
       .split("+")
       .filter(Boolean);
 
-  function antiDerivativeAt(x) {
-    let total =
-      0;
+  function antiDerivativeAt(
+    x
+  ) {
+    let total = 0;
 
-    for (const originalTerm of terms) {
+    for (
+      const originalTerm
+      of terms
+    ) {
       const term =
         originalTerm
           .replace(
@@ -2418,7 +3433,9 @@ function definitePolynomialIntegral(text) {
         }
 
         const power =
-          Number(match[2]);
+          Number(
+            match[2]
+          );
 
         total +=
           coef *
@@ -2501,11 +3518,18 @@ function definitePolynomialIntegral(text) {
   }
 }
 
-function prepareMathExpression(expression) {
+function prepareMathExpression(
+  expression
+) {
   let expr =
-    String(expression || "")
+    String(
+      expression || ""
+    )
       .trim()
-      .replace(/π/g, "pi")
+      .replace(
+        /π/g,
+        "pi"
+      )
       .replace(
         /√\s*([0-9.]+)/g,
         "sqrt($1)"
@@ -2526,9 +3550,12 @@ function prepareMathExpression(expression) {
   return expr;
 }
 
-function tryCalculate(text) {
+function tryCalculate(
+  text
+) {
   const original =
-    String(text || "").trim();
+    String(text || "")
+      .trim();
 
   if (!original) {
     return null;
@@ -2541,7 +3568,8 @@ function tryCalculate(text) {
 
   if (percentage) {
     return {
-      expression: original,
+      expression:
+        original,
       result:
         percentage.result,
       answer:
@@ -2556,8 +3584,10 @@ function tryCalculate(text) {
 
   if (quadratic) {
     return {
-      expression: original,
-      result: null,
+      expression:
+        original,
+      result:
+        null,
       answer:
         quadratic.answer
     };
@@ -2570,8 +3600,10 @@ function tryCalculate(text) {
 
   if (derivative) {
     return {
-      expression: original,
-      result: null,
+      expression:
+        original,
+      result:
+        null,
       answer:
         derivative.answer
     };
@@ -2584,8 +3616,10 @@ function tryCalculate(text) {
 
   if (integral) {
     return {
-      expression: original,
-      result: null,
+      expression:
+        original,
+      result:
+        null,
       answer:
         integral.answer
     };
@@ -2626,7 +3660,9 @@ function tryCalculate(text) {
 
   const containsMathFunction =
     /\b(sqrt|sin|cos|tan|asin|acos|atan|log|ln|exp|abs|floor|ceil|round|fact|pow|min|max)\b/i
-      .test(expression) ||
+      .test(
+        expression
+      ) ||
     /\bpi\b|\be\b/i.test(
       expression
     );
@@ -2671,9 +3707,10 @@ function tryCalculate(text) {
   }
 }
 
-
 // ============================================================
-// LIBRETRANSLATE - API KEYSIZ FALLBACK
+// TRANSLATOR
+// GOOGLE PUBLIC ENDPOINT + LIBRETRANSLATE FALLBACK
+// API KEY TALAB QILMAYDI
 // ============================================================
 
 const TRANSLATION_LANGUAGES = {
@@ -2701,7 +3738,6 @@ const TRANSLATION_LANGUAGES = {
     "rus",
     "ruscha",
     "rusga",
-    "ruscha",
     "ruschaga",
     "russ",
     "russian",
@@ -2770,8 +3806,8 @@ const TRANSLATION_LANGUAGES = {
     "arabga",
     "arabchaga",
     "arabic",
-    "العربية",
     "арабский",
+    "العربية",
     "ar"
   ],
 
@@ -2875,61 +3911,109 @@ const TRANSLATION_LANGUAGES = {
   ]
 };
 
-const LIBRETRANSLATE_ENDPOINTS = [
-  "https://translate.cutie.dating/translate",
-  "https://translate.fedilab.app/translate"
-];
-
-function normalizeTranslationText(text) {
+function normalizeTranslationText(
+  text
+) {
   return String(text || "")
     .toLowerCase()
-    .replace(/[ʻ’‘`´]/g, "'")
-    .replace(/[?!.,;:()[\]{}]/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(
+      /[ʻ’‘`´]/g,
+      "'"
+    )
+    .replace(
+      /[?!.,;:()[\]{}]/g,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
     .trim();
 }
 
-function normalizeTranslationAlias(text) {
-  return normalizeTranslationText(text)
-    .replace(/\btiliga\b/g, "")
-    .replace(/\btilga\b/g, "")
-    .replace(/\btil\b/g, "")
+function normalizeTranslationAlias(
+  text
+) {
+  return normalizeTranslationText(
+    text
+  )
+    .replace(
+      /\btiliga\b/g,
+      ""
+    )
+    .replace(
+      /\btilga\b/g,
+      ""
+    )
+    .replace(
+      /\btil\b/g,
+      ""
+    )
     .trim();
 }
 
-function translationLanguageCode(input) {
+function translationLanguageCode(
+  input
+) {
   const value =
-    normalizeTranslationAlias(input);
+    normalizeTranslationAlias(
+      input
+    );
 
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   let bestCode = null;
   let bestScore = 0;
 
-  for (const [code, aliases] of Object.entries(TRANSLATION_LANGUAGES)) {
-    for (const alias of aliases) {
+  for (
+    const [code, aliases]
+    of Object.entries(
+      TRANSLATION_LANGUAGES
+    )
+  ) {
+    for (
+      const alias
+      of aliases
+    ) {
       const a =
-        normalizeTranslationAlias(alias);
+        normalizeTranslationAlias(
+          alias
+        );
 
-      if (!a) continue;
+      if (!a) {
+        continue;
+      }
 
-      if (value === a) {
+      if (
+        value === a
+      ) {
         return code;
       }
 
-      if (value.includes(a)) {
-        if (100 > bestScore) {
+      if (
+        value.includes(a)
+      ) {
+        if (
+          bestScore < 100
+        ) {
           bestCode = code;
           bestScore = 100;
         }
+
         continue;
       }
 
       const valueWords =
-        value.split(/\s+/);
+        value.split(
+          /\s+/
+        );
 
       const aliasWords =
-        a.split(/\s+/);
+        a.split(
+          /\s+/
+        );
 
       if (
         valueWords.length === 1 &&
@@ -2943,23 +4027,32 @@ function translationLanguageCode(input) {
 
         if (
           distance <= 1 &&
-          95 > bestScore
+          bestScore < 95
         ) {
-          bestCode = code;
-          bestScore = 95;
+          bestCode =
+            code;
+
+          bestScore =
+            95;
         } else if (
           distance <= 2 &&
-          85 > bestScore
+          bestScore < 85
         ) {
-          bestCode = code;
-          bestScore = 85;
+          bestCode =
+            code;
+
+          bestScore =
+            85;
         } else if (
           distance <= 3 &&
           a.length >= 6 &&
-          70 > bestScore
+          bestScore < 70
         ) {
-          bestCode = code;
-          bestScore = 70;
+          bestCode =
+            code;
+
+          bestScore =
+            70;
         }
       }
     }
@@ -2968,7 +4061,9 @@ function translationLanguageCode(input) {
   return bestCode;
 }
 
-function extractTranslationTarget(text) {
+function extractTranslationTarget(
+  text
+) {
   const original =
     String(text || "")
       .trim();
@@ -2982,16 +4077,27 @@ function extractTranslationTarget(text) {
       original
     );
 
-  // Avval aniq aliaslarni qidiramiz.
   let bestCode = null;
   let bestLength = 0;
 
-  for (const [code, aliases] of Object.entries(TRANSLATION_LANGUAGES)) {
-    for (const alias of aliases) {
+  for (
+    const [code, aliases]
+    of Object.entries(
+      TRANSLATION_LANGUAGES
+    )
+  ) {
+    for (
+      const alias
+      of aliases
+    ) {
       const a =
-        normalizeTranslationAlias(alias);
+        normalizeTranslationAlias(
+          alias
+        );
 
-      if (!a) continue;
+      if (!a) {
+        continue;
+      }
 
       const escaped =
         a.replace(
@@ -3001,14 +4107,24 @@ function extractTranslationTarget(text) {
 
       const pattern =
         new RegExp(
-          `(?:^|\\s|:|-)(?:${escaped})(?=\\s|:|$)`,
+          `(?:^|\\s|:|-)(?:${escaped})(?=\\s|:|-|$)`,
           "iu"
         );
 
-      if (pattern.test(normalized)) {
-        if (a.length > bestLength) {
-          bestCode = code;
-          bestLength = a.length;
+      if (
+        pattern.test(
+          normalized
+        )
+      ) {
+        if (
+          a.length >
+          bestLength
+        ) {
+          bestCode =
+            code;
+
+          bestLength =
+            a.length;
         }
       }
     }
@@ -3018,14 +4134,19 @@ function extractTranslationTarget(text) {
     return bestCode;
   }
 
-  // Alohida so'z bo'yicha xatoga chidamli qidiruv.
   const words =
-    normalized.split(/\s+/)
+    normalized
+      .split(/\s+/)
       .filter(Boolean);
 
-  for (const word of words) {
+  for (
+    const word
+    of words
+  ) {
     const code =
-      translationLanguageCode(word);
+      translationLanguageCode(
+        word
+      );
 
     if (code) {
       return code;
@@ -3035,28 +4156,35 @@ function extractTranslationTarget(text) {
   return null;
 }
 
-function removeTranslationCommand(text, targetCode) {
+function removeTranslationCommand(
+  text,
+  targetCode
+) {
   let value =
     String(text || "")
       .trim();
 
   const aliases =
     [
-      ...(TRANSLATION_LANGUAGES[targetCode] || [])
-    ]
-      .sort(
-        (a, b) =>
-          b.length - a.length
-      );
+      ...(TRANSLATION_LANGUAGES[
+        targetCode
+      ] || [])
+    ].sort(
+      (a, b) =>
+        b.length - a.length
+    );
 
-  // 1. Til nomini qayerda bo'lishidan qat'i nazar olib tashlaymiz.
-  for (const alias of aliases) {
+  for (
+    const alias
+    of aliases
+  ) {
     const escaped =
-      normalizeTranslationAlias(alias)
-        .replace(
-          /[.*+?^${}()|[\]\\]/g,
-          "\\$&"
-        );
+      normalizeTranslationAlias(
+        alias
+      ).replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
 
     value =
       value.replace(
@@ -3068,7 +4196,6 @@ function removeTranslationCommand(text, targetCode) {
       );
   }
 
-  // 2. Buyruqlarni olib tashlaymiz.
   value =
     value
       .replace(
@@ -3084,14 +4211,16 @@ function removeTranslationCommand(text, targetCode) {
         ""
       );
 
-  // 3. Ikki nuqtadan keyingi asosiy matnni olish.
   const colon =
     value.indexOf(":");
 
   if (colon >= 0) {
     const left =
       normalizeTranslationText(
-        value.slice(0, colon)
+        value.slice(
+          0,
+          colon
+        )
       );
 
     if (
@@ -3105,7 +4234,6 @@ function removeTranslationCommand(text, targetCode) {
     }
   }
 
-  // 4. "shu gapni..." kabi qolib ketgan prefikslar.
   value =
     value
       .replace(
@@ -3117,7 +4245,6 @@ function removeTranslationCommand(text, targetCode) {
         ""
       );
 
-  // 5. Oxiridagi "ni" ni ehtiyotkorlik bilan olib tashlash.
   value =
     value
       .replace(
@@ -3141,7 +4268,9 @@ function removeTranslationCommand(text, targetCode) {
   return value;
 }
 
-function findTranslationIntent(text) {
+function findTranslationIntent(
+  text
+) {
   const original =
     String(text || "")
       .trim();
@@ -3165,16 +4294,23 @@ function findTranslationIntent(text) {
     );
 
   const hasTarget =
-    Boolean(targetCode);
+    Boolean(
+      targetCode
+    );
 
-  if (!hasCommand && !hasTarget) {
+  if (
+    !hasCommand &&
+    !hasTarget
+  ) {
     return null;
   }
 
   if (!targetCode) {
     return {
-      targetCode: null,
-      sourceText: "",
+      targetCode:
+        null,
+      sourceText:
+        "",
       error:
         "Tarjima tilini aniqlab bo‘lmadi."
     };
@@ -3189,7 +4325,8 @@ function findTranslationIntent(text) {
   if (!sourceText) {
     return {
       targetCode,
-      sourceText: "",
+      sourceText:
+        "",
       error:
         "Tarjima qilinadigan matn topilmadi."
     };
@@ -3201,15 +4338,142 @@ function findTranslationIntent(text) {
   };
 }
 
+// ------------------------------------------------------------
+// GOOGLE PUBLIC TRANSLATE
+// API KEY SHART EMAS
+// ------------------------------------------------------------
+
+async function translateWithGooglePublic(
+  sourceText,
+  targetCode
+) {
+  const url =
+    "https://translate.googleapis.com/translate_a/single" +
+    "?client=gtx" +
+    "&sl=auto" +
+    `&tl=${encodeURIComponent(
+      targetCode
+    )}` +
+    "&dt=t" +
+    `&q=${encodeURIComponent(
+      sourceText
+    )}`;
+
+  console.log(
+    "Google public translate:",
+    targetCode
+  );
+
+  const response =
+    await fetch(
+      url,
+      {
+        method:
+          "GET",
+        headers: {
+          "Accept":
+            "application/json",
+          "User-Agent":
+            "QamirAI/1.0"
+        },
+        signal:
+          AbortSignal.timeout(
+            15000
+          )
+      }
+    );
+
+  if (
+    !response.ok
+  ) {
+    const body =
+      await response
+        .text()
+        .catch(
+          () => ""
+        );
+
+    throw new Error(
+      `Google Translate HTTP ${response.status}: ${body.slice(0, 300)}`
+    );
+  }
+
+  const data =
+    await response.json()
+      .catch(
+        () => null
+      );
+
+  if (!data) {
+    throw new Error(
+      "Google Translate javobi JSON emas."
+    );
+  }
+
+  const pieces = [];
+
+  if (
+    Array.isArray(
+      data[0]
+    )
+  ) {
+    for (
+      const item
+      of data[0]
+    ) {
+      if (
+        Array.isArray(item) &&
+        typeof item[0] ===
+          "string"
+      ) {
+        pieces.push(
+          item[0]
+        );
+      }
+    }
+  }
+
+  const translated =
+    pieces
+      .join("")
+      .trim();
+
+  if (!translated) {
+    throw new Error(
+      "Google Translate tarjima qaytarmadi."
+    );
+  }
+
+  return {
+    text:
+      translated,
+    detectedSource:
+      typeof data[2] ===
+      "string"
+        ? data[2]
+        : ""
+  };
+}
+
+// ------------------------------------------------------------
+// LIBRETRANSLATE FALLBACK
+// ------------------------------------------------------------
+
+const LIBRETRANSLATE_ENDPOINTS = [
+  "https://translate.cutie.dating/translate",
+  "https://translate.fedilab.app/translate"
+];
+
 async function translateWithLibreTranslate(
   sourceText,
   targetCode
 ) {
   let lastError =
-    "Translator serverlari javob bermadi.";
+    "LibreTranslate serverlari javob bermadi.";
 
   for (
-    const endpoint of LIBRETRANSLATE_ENDPOINTS
+    const endpoint
+    of LIBRETRANSLATE_ENDPOINTS
   ) {
     try {
       console.log(
@@ -3223,7 +4487,8 @@ async function translateWithLibreTranslate(
         await fetch(
           endpoint,
           {
-            method: "POST",
+            method:
+              "POST",
             headers: {
               "Content-Type":
                 "application/json",
@@ -3234,21 +4499,32 @@ async function translateWithLibreTranslate(
             },
             body:
               JSON.stringify({
-                q: sourceText,
-                source: "auto",
-                target: targetCode,
-                format: "text"
+                q:
+                  sourceText,
+                source:
+                  "auto",
+                target:
+                  targetCode,
+                format:
+                  "text"
               }),
             signal:
-              AbortSignal.timeout(15000)
+              AbortSignal.timeout(
+                15000
+              )
           }
         );
 
       const data =
-        await response.json()
-          .catch(() => ({}));
+        await response
+          .json()
+          .catch(
+            () => ({})
+          );
 
-      if (!response.ok) {
+      if (
+        !response.ok
+      ) {
         lastError =
           data?.error ||
           `LibreTranslate HTTP ${response.status}`;
@@ -3266,26 +4542,27 @@ async function translateWithLibreTranslate(
         data?.translatedText;
 
       if (
-        typeof translated === "string" &&
+        typeof translated ===
+          "string" &&
         translated.trim()
       ) {
         return {
           text:
             translated.trim(),
           detectedSource:
-            data?.detectedLanguage?.language ||
+            data?.detectedLanguage
+              ?.language ||
             data?.detectedSourceLanguage ||
             ""
         };
       }
 
       lastError =
-        "Translator javobida translatedText topilmadi.";
-
+        "LibreTranslate javobida translatedText topilmadi.";
     } catch (e) {
       lastError =
         e?.message ||
-        "Translator ulanish xatosi";
+        "LibreTranslate ulanish xatosi";
 
       console.error(
         "LibreTranslate endpoint xatosi:",
@@ -3300,36 +4577,93 @@ async function translateWithLibreTranslate(
   );
 }
 
-async function tryTranslate(text) {
+// ------------------------------------------------------------
+// ASOSIY TRANSLATOR
+// GOOGLE -> LIBRETRANSLATE
+// ------------------------------------------------------------
+
+async function tryTranslate(
+  text
+) {
   const intent =
-    findTranslationIntent(text);
+    findTranslationIntent(
+      text
+    );
 
   if (!intent) {
     return null;
   }
 
-  if (intent.error) {
+  if (
+    intent.error
+  ) {
     throw new Error(
       intent.error
     );
   }
 
-  const result =
-    await translateWithLibreTranslate(
-      intent.sourceText,
-      intent.targetCode
+  let googleError =
+    "";
+
+  try {
+    const result =
+      await translateWithGooglePublic(
+        intent.sourceText,
+        intent.targetCode
+      );
+
+    return {
+      sourceText:
+        intent.sourceText,
+      targetCode:
+        intent.targetCode,
+      translated:
+        result.text,
+      detectedSource:
+        result.detectedSource
+    };
+  } catch (e) {
+    googleError =
+      e?.message ||
+      "Google public translate xatosi";
+
+    console.error(
+      "GOOGLE PUBLIC TRANSLATE ERROR:",
+      googleError
+    );
+  }
+
+  try {
+    const result =
+      await translateWithLibreTranslate(
+        intent.sourceText,
+        intent.targetCode
+      );
+
+    return {
+      sourceText:
+        intent.sourceText,
+      targetCode:
+        intent.targetCode,
+      translated:
+        result.text,
+      detectedSource:
+        result.detectedSource
+    };
+  } catch (e) {
+    const libreError =
+      e?.message ||
+      "LibreTranslate xatosi";
+
+    console.error(
+      "LIBRETRANSLATE ERROR:",
+      libreError
     );
 
-  return {
-    sourceText:
-      intent.sourceText,
-    targetCode:
-      intent.targetCode,
-    translated:
-      result.text,
-    detectedSource:
-      result.detectedSource
-  };
+    throw new Error(
+      `Tarjima serverlari ishlamadi. Google: ${googleError || "noma'lum"}. LibreTranslate: ${libreError}`
+    );
+  }
 }
 
 // ============================================================
@@ -3337,9 +4671,10 @@ async function tryTranslate(text) {
 // ============================================================
 
 async function getSettings() {
-  const rows = await db(
-    `SELECT * FROM settings WHERE id = 1`
-  );
+  const rows =
+    await db(
+      `SELECT * FROM settings WHERE id = 1`
+    );
 
   return rows[0] || {};
 }
@@ -3364,13 +4699,15 @@ async function askGemini(
     settings.model ||
     "gemini-2.5-flash";
 
-  const context = knowledge
-    .map((x, i) =>
-      `[QAMIR BILIMI ${i + 1}]
+  const context =
+    knowledge
+      .map(
+        (x, i) =>
+          `[QAMIR BILIMI ${i + 1}]
 Savol: ${x.question || x.title}
 Javob: ${x.answer}`
-    )
-    .join("\n\n");
+      )
+      .join("\n\n");
 
   const systemPrompt = `
 Siz Qamir AI nomli shaxsiy sun'iy intellekt yordamchisisiz.
@@ -3424,20 +4761,34 @@ ${context || "(Mos bilim topilmadi.)"}
   const contents =
     (history || [])
       .slice(-18)
-      .map(m => ({
-        role:
-          m.sender === "assistant"
-            ? "model"
-            : "user",
-        parts: [
-          { text: String(m.text) }
-        ]
-      }));
+      .map(
+        m => ({
+          role:
+            m.sender ===
+            "assistant"
+              ? "model"
+              : "user",
+          parts: [
+            {
+              text:
+                String(
+                  m.text
+                )
+            }
+          ]
+        })
+      );
 
   contents.push({
-    role: "user",
+    role:
+      "user",
     parts: [
-      { text: String(userText) }
+      {
+        text:
+          String(
+            userText
+          )
+      }
     ]
   });
 
@@ -3445,48 +4796,61 @@ ${context || "(Mos bilim topilmadi.)"}
     await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
       {
-        method: "POST",
+        method:
+          "POST",
         headers: {
           "Content-Type":
             "application/json"
         },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [
-              { text: systemPrompt }
-            ]
-          },
-          contents,
-          generationConfig: {
-            temperature: Math.max(
-              0,
-              Math.min(
-                2,
-                Number(
-                  settings.temperature ?? 0.7
-                )
-              )
-            ),
-            maxOutputTokens:
-              Math.max(
-                64,
-                Math.min(
-                  8192,
-                  Number(
-                    settings.max_tokens ?? 1024
+        body:
+          JSON.stringify({
+            systemInstruction: {
+              parts: [
+                {
+                  text:
+                    systemPrompt
+                }
+              ]
+            },
+            contents,
+            generationConfig: {
+              temperature:
+                Math.max(
+                  0,
+                  Math.min(
+                    2,
+                    Number(
+                      settings.temperature ??
+                      0.7
+                    )
+                  )
+                ),
+              maxOutputTokens:
+                Math.max(
+                  64,
+                  Math.min(
+                    8192,
+                    Number(
+                      settings.max_tokens ??
+                      1024
+                    )
                   )
                 )
-              )
-          }
-        })
+            }
+          })
       }
     );
 
   const data =
-    await response.json()
-      .catch(() => ({}));
+    await response
+      .json()
+      .catch(
+        () => ({})
+      );
 
-  if (!response.ok) {
+  if (
+    !response.ok
+  ) {
     throw new Error(
       data?.error?.message ||
       `Gemini HTTP ${response.status}`
@@ -3494,89 +4858,147 @@ ${context || "(Mos bilim topilmadi.)"}
   }
 
   return (
-    data?.candidates?.[0]?.content?.parts || []
+    data
+      ?.candidates?.[0]
+      ?.content?.parts ||
+    []
   )
-    .map(p => p.text || "")
+    .map(
+      p => p.text || ""
+    )
     .join("")
-    .trim() || null;
+    .trim() ||
+    null;
 }
 
 // ============================================================
 // HEALTH / AUTH
 // ============================================================
 
-app.get("/api/health", async (req, res) => {
-  try {
-    await db("SELECT 1");
+app.get(
+  "/api/health",
+  async (
+    req,
+    res
+  ) => {
+    try {
+      await db(
+        "SELECT 1"
+      );
 
-    res.json({
-      ok: true,
-      database: "connected",
-      gemini:
-        Boolean(
-          process.env.GEMINI_API_KEY
-        ),
-      libretranslate:
-        true,
-      model:
-        process.env.GEMINI_MODEL ||
-        "gemini-2.5-flash"
-    });
-  } catch (e) {
-    res.status(500).json({
-      ok: false,
-      database: "error",
-      error: e.message
-    });
+      res.json({
+        ok:
+          true,
+
+        database:
+          "connected",
+
+        gemini:
+          Boolean(
+            process.env
+              .GEMINI_API_KEY
+          ),
+
+        translator:
+          true,
+
+        model:
+          process.env
+            .GEMINI_MODEL ||
+          "gemini-2.5-flash"
+      });
+    } catch (e) {
+      res.status(500).json({
+        ok:
+          false,
+
+        database:
+          "error",
+
+        error:
+          e.message
+      });
+    }
   }
-});
+);
 
-async function register(req, res) {
+async function register(
+  req,
+  res
+) {
   try {
     const {
       username,
       email = "",
       password
-    } = req.body || {};
+    } =
+      req.body || {};
 
     const un =
-      String(username || "").trim();
+      String(
+        username || ""
+      ).trim();
 
     if (
       un.length < 3 ||
-      String(password || "").length < 6
+      String(
+        password || ""
+      ).length < 6
     ) {
-      return res.status(400).json({
-        error:
-          "Login kamida 3, parol kamida 6 belgidan iborat bo'lsin"
-      });
+      return res
+        .status(400)
+        .json({
+          error:
+            "Login kamida 3, parol kamida 6 belgidan iborat bo'lsin"
+        });
     }
 
-    const rows = await db(
-      `INSERT INTO users
-       (username, email, password_hash)
-       VALUES ($1, $2, $3)
-       RETURNING id, username, email, birth_date,
-                 city, avatar, is_admin,
-                 created_at, last_seen`,
-      [
-        un,
-        String(email).trim(),
-        hashPassword(password)
-      ]
-    );
+    const rows =
+      await db(
+        `INSERT INTO users
+         (username, email, password_hash)
+         VALUES ($1, $2, $3)
+         RETURNING id, username, email, birth_date,
+                   city, avatar, is_admin,
+                   created_at, last_seen`,
+        [
+          un,
+          String(
+            email
+          ).trim(),
+          hashPassword(
+            password
+          )
+        ]
+      );
 
-    res.status(201).json({
-      success: true,
-      user: safeUser(rows[0]),
-      token: String(rows[0].id)
-    });
-  } catch (e) {
-    if (e.code === "23505") {
-      return res.status(409).json({
-        error:
-          "Bu login allaqachon mavjud"
+    res
+      .status(201)
+      .json({
+        success:
+          true,
+
+        user:
+          safeUser(
+            rows[0]
+          ),
+
+        token:
+          String(
+            rows[0].id
+          )
       });
+  } catch (e) {
+    if (
+      e.code ===
+      "23505"
+    ) {
+      return res
+        .status(409)
+        .json({
+          error:
+            "Bu login allaqachon mavjud"
+        });
     }
 
     console.error(
@@ -3584,52 +5006,78 @@ async function register(req, res) {
       e
     );
 
-    res.status(500).json({
-      error:
-        "Ro'yxatdan o'tishda server xatosi"
-    });
+    res
+      .status(500)
+      .json({
+        error:
+          "Ro'yxatdan o'tishda server xatosi"
+      });
   }
 }
 
-async function login(req, res) {
+async function login(
+  req,
+  res
+) {
   try {
     const {
       username,
       password
-    } = req.body || {};
+    } =
+      req.body || {};
 
-    const rows = await db(
-      `SELECT id, username, email, birth_date,
-              city, avatar, is_admin,
-              created_at, last_seen
-       FROM users
-       WHERE LOWER(username) = LOWER($1)
-         AND password_hash = $2
-       LIMIT 1`,
-      [
-        String(username || "").trim(),
-        hashPassword(password || "")
-      ]
-    );
+    const rows =
+      await db(
+        `SELECT id, username, email, birth_date,
+                city, avatar, is_admin,
+                created_at, last_seen
+         FROM users
+         WHERE LOWER(username) = LOWER($1)
+           AND password_hash = $2
+         LIMIT 1`,
+        [
+          String(
+            username || ""
+          ).trim(),
+          hashPassword(
+            password || ""
+          )
+        ]
+      );
 
-    if (!rows.length) {
-      return res.status(401).json({
-        error:
-          "Login yoki parol noto'g'ri"
-      });
+    if (
+      !rows.length
+    ) {
+      return res
+        .status(401)
+        .json({
+          error:
+            "Login yoki parol noto'g'ri"
+        });
     }
 
     await db(
       `UPDATE users
        SET last_seen = NOW()
        WHERE id = $1`,
-      [rows[0].id]
+      [
+        rows[0].id
+      ]
     );
 
     res.json({
-      success: true,
-      user: safeUser(rows[0]),
-      token: String(rows[0].id)
+      success:
+        true,
+
+      user:
+        safeUser(
+          rows[0]
+        ),
+
+      token:
+        String(
+          rows[0].id
+        )
     });
   } catch (e) {
     console.error(
@@ -3637,10 +5085,12 @@ async function login(req, res) {
       e
     );
 
-    res.status(500).json({
-      error:
-        "Kirishda server xatosi"
-    });
+    res
+      .status(500)
+      .json({
+        error:
+          "Kirishda server xatosi"
+      });
   }
 }
 
@@ -3667,10 +5117,17 @@ app.post(
 app.get(
   "/api/me",
   requireUser,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     res.json({
-      success: true,
-      user: safeUser(req.user)
+      success:
+        true,
+      user:
+        safeUser(
+          req.user
+        )
     });
   }
 );
@@ -3682,21 +5139,27 @@ app.get(
 app.get(
   "/api/knowledge",
   requireUser,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     try {
-      const rows = await db(`
-        SELECT id, title, question, answer,
-               raw_text AS text,
-               type, enabled,
-               created_at, updated_at
-        FROM knowledge
-        WHERE enabled = TRUE
-        ORDER BY id DESC
-      `);
+      const rows =
+        await db(`
+          SELECT id, title, question, answer,
+                 raw_text AS text,
+                 type, enabled,
+                 created_at, updated_at
+          FROM knowledge
+          WHERE enabled = TRUE
+          ORDER BY id DESC
+        `);
 
       res.json({
-        success: true,
-        knowledge: rows
+        success:
+          true,
+        knowledge:
+          rows
       });
     } catch (e) {
       console.error(
@@ -3704,10 +5167,12 @@ app.get(
         e
       );
 
-      res.status(500).json({
-        error:
-          "Bilimlarni olishda xato"
-      });
+      res
+        .status(500)
+        .json({
+          error:
+            "Bilimlarni olishda xato"
+        });
     }
   }
 );
@@ -3715,7 +5180,10 @@ app.get(
 app.post(
   "/api/knowledge",
   requireAdmin,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     try {
       const {
         title = "",
@@ -3724,54 +5192,82 @@ app.post(
         text = "",
         type = "general",
         enabled = true
-      } = req.body || {};
+      } =
+        req.body || {};
 
       const raw =
         String(
-          text || answer || ""
+          text ||
+          answer ||
+          ""
         ).trim();
 
       if (!raw) {
-        return res.status(400).json({
-          error:
-            "Bilim matni bo'sh"
-        });
+        return res
+          .status(400)
+          .json({
+            error:
+              "Bilim matni bo'sh"
+          });
       }
 
-      const rows = await db(
-        `INSERT INTO knowledge
-         (title, question, answer, raw_text,
-          type, enabled)
-         VALUES
-         ($1, $2, $3, $4, $5, $6)
-         RETURNING id, title, question,
-                   answer, raw_text AS text,
-                   type, enabled,
-                   created_at, updated_at`,
-        [
-          String(title).trim(),
-          String(question).trim(),
-          String(answer || raw).trim(),
-          raw,
-          String(type),
-          Boolean(enabled)
-        ]
-      );
+      const rows =
+        await db(
+          `INSERT INTO knowledge
+           (title, question, answer, raw_text,
+            type, enabled)
+           VALUES
+           ($1, $2, $3, $4, $5, $6)
+           RETURNING id, title, question,
+                     answer, raw_text AS text,
+                     type, enabled,
+                     created_at, updated_at`,
+          [
+            String(
+              title
+            ).trim(),
 
-      res.status(201).json({
-        success: true,
-        knowledge: rows[0]
-      });
+            String(
+              question
+            ).trim(),
+
+            String(
+              answer ||
+              raw
+            ).trim(),
+
+            raw,
+
+            String(
+              type
+            ),
+
+            Boolean(
+              enabled
+            )
+          ]
+        );
+
+      res
+        .status(201)
+        .json({
+          success:
+            true,
+          knowledge:
+            rows[0]
+        });
     } catch (e) {
       console.error(
         "KNOWLEDGE ADD ERROR:",
         e
       );
 
-      res.status(500).json({
-        error:
-          "Bilimni saqlashda xato"
-      });
+      res
+        .status(500)
+        .json({
+          error:
+            "Bilimni saqlashda xato"
+        });
     }
   }
 );
@@ -3779,37 +5275,52 @@ app.post(
 app.delete(
   "/api/knowledge/:id",
   requireAdmin,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     try {
       const id =
-        Number(req.params.id);
+        Number(
+          req.params.id
+        );
 
       if (
-        !Number.isSafeInteger(id) ||
+        !Number.isSafeInteger(
+          id
+        ) ||
         id <= 0
       ) {
-        return res.status(400).json({
-          error:
-            "Bilim ID noto‘g‘ri"
-        });
+        return res
+          .status(400)
+          .json({
+            error:
+              "Bilim ID noto‘g‘ri"
+          });
       }
 
-      const rows = await db(
-        `DELETE FROM knowledge
-         WHERE id = $1
-         RETURNING id`,
-        [id]
-      );
+      const rows =
+        await db(
+          `DELETE FROM knowledge
+           WHERE id = $1
+           RETURNING id`,
+          [id]
+        );
 
-      if (!rows.length) {
-        return res.status(404).json({
-          error:
-            "Bilim topilmadi"
-        });
+      if (
+        !rows.length
+      ) {
+        return res
+          .status(404)
+          .json({
+            error:
+              "Bilim topilmadi"
+          });
       }
 
       res.json({
-        success: true
+        success:
+          true
       });
     } catch (e) {
       console.error(
@@ -3817,10 +5328,12 @@ app.delete(
         e
       );
 
-      res.status(500).json({
-        error:
-          "Bilimni o'chirishda xato"
-      });
+      res
+        .status(500)
+        .json({
+          error:
+            "Bilimni o'chirishda xato"
+        });
     }
   }
 );
@@ -3828,7 +5341,10 @@ app.delete(
 app.delete(
   "/api/knowledge/all",
   requireAdmin,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     try {
       await db(
         `TRUNCATE TABLE knowledge
@@ -3836,7 +5352,9 @@ app.delete(
       );
 
       res.json({
-        success: true,
+        success:
+          true,
+
         message:
           "Barcha bilimlar o‘chirildi"
       });
@@ -3846,10 +5364,12 @@ app.delete(
         e
       );
 
-      res.status(500).json({
-        error:
-          "Barcha bilimlarni o‘chirishda xato"
-      });
+      res
+        .status(500)
+        .json({
+          error:
+            "Barcha bilimlarni o‘chirishda xato"
+        });
     }
   }
 );
@@ -3857,7 +5377,10 @@ app.delete(
 app.get(
   "/api/admin/knowledge",
   requireAdmin,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     const rows =
       await db(`
         SELECT id, title, question,
@@ -3869,8 +5392,10 @@ app.get(
       `);
 
     res.json({
-      success: true,
-      knowledge: rows
+      success:
+        true,
+      knowledge:
+        rows
     });
   }
 );
@@ -3882,13 +5407,18 @@ app.get(
 app.get(
   "/api/settings",
   requireAdmin,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     const s =
       await getSettings();
 
     res.json({
-      success: true,
-      settings: s
+      success:
+        true,
+      settings:
+        s
     });
   }
 );
@@ -3896,12 +5426,16 @@ app.get(
 app.put(
   "/api/settings",
   requireAdmin,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     try {
       const s =
         req.body || {};
 
-      await db(`
+      await db(
+        `
         UPDATE settings SET
           agent_name = $1,
           brand_name = $2,
@@ -3921,59 +5455,65 @@ app.put(
           max_tokens = $16,
           updated_at = NOW()
         WHERE id = 1
-      `, [
-        s.agent_name ||
-          "Qamir",
+      `,
+        [
+          s.agent_name ||
+            "Qamir",
 
-        s.brand_name ||
-          "Qamir AI",
+          s.brand_name ||
+            "Qamir AI",
 
-        s.role || "",
+          s.role ||
+            "",
 
-        s.instruction ||
-          "",
+          s.instruction ||
+            "",
 
-        s.must_rules ||
-          "",
+          s.must_rules ||
+            "",
 
-        s.never_rules ||
-          "",
+          s.never_rules ||
+            "",
 
-        s.customer_rules ||
-          "",
+          s.customer_rules ||
+            "",
 
-        s.language ||
-          "O‘zbek",
+          s.language ||
+            "O‘zbek",
 
-        s.tone ||
-          "Samimiy",
+          s.tone ||
+            "Samimiy",
 
-        s.emoji ||
-          "some",
+          s.emoji ||
+            "some",
 
-        s.answer_length ||
-          "O‘rtacha",
+          s.answer_length ||
+            "O‘rtacha",
 
-        s.greeting ||
-          "Salom! Men Qamir AI. Sizga qanday yordam beray?",
+          s.greeting ||
+            "Salom! Men Qamir AI. Sizga qanday yordam beray?",
 
-        s.ask_style ||
-          "",
+          s.ask_style ||
+            "",
 
-        s.model ||
-          "gemini-2.5-flash",
+          s.model ||
+            "gemini-2.5-flash",
 
-        Number(
-          s.temperature ?? 0.7
-        ),
+          Number(
+            s.temperature ??
+            0.7
+          ),
 
-        Number(
-          s.max_tokens ?? 1024
-        )
-      ]);
+          Number(
+            s.max_tokens ??
+            1024
+          )
+        ]
+      );
 
       res.json({
-        success: true
+        success:
+          true
       });
     } catch (e) {
       console.error(
@@ -3981,10 +5521,12 @@ app.put(
         e
       );
 
-      res.status(500).json({
-        error:
-          "Sozlamalarni saqlashda xato"
-      });
+      res
+        .status(500)
+        .json({
+          error:
+            "Sozlamalarni saqlashda xato"
+        });
     }
   }
 );
@@ -3992,7 +5534,10 @@ app.put(
 app.put(
   "/api/profile",
   requireUser,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     try {
       const {
         email = "",
@@ -4000,20 +5545,26 @@ app.put(
         city = "",
         avatar = "",
         password = ""
-      } = req.body || {};
+      } =
+        req.body || {};
 
       if (
         password &&
-        String(password).length < 6
+        String(
+          password
+        ).length < 6
       ) {
-        return res.status(400).json({
-          error:
-            "Yangi parol kamida 6 belgi bo'lsin"
-        });
+        return res
+          .status(400)
+          .json({
+            error:
+              "Yangi parol kamida 6 belgi bo'lsin"
+          });
       }
 
       if (password) {
-        await db(`
+        await db(
+          `
           UPDATE users
           SET
             email = $1,
@@ -4023,19 +5574,35 @@ app.put(
             password_hash = $5,
             last_seen = NOW()
           WHERE id = $6
-        `, [
-          String(email).trim(),
-          String(birth_date),
-          String(city).trim(),
-          String(
-            avatar ||
-            "assets/avatar.svg"
-          ),
-          hashPassword(password),
-          req.user.id
-        ]);
+        `,
+          [
+            String(
+              email
+            ).trim(),
+
+            String(
+              birth_date
+            ),
+
+            String(
+              city
+            ).trim(),
+
+            String(
+              avatar ||
+              "assets/avatar.svg"
+            ),
+
+            hashPassword(
+              password
+            ),
+
+            req.user.id
+          ]
+        );
       } else {
-        await db(`
+        await db(
+          `
           UPDATE users
           SET
             email = $1,
@@ -4044,20 +5611,33 @@ app.put(
             avatar = $4,
             last_seen = NOW()
           WHERE id = $5
-        `, [
-          String(email).trim(),
-          String(birth_date),
-          String(city).trim(),
-          String(
-            avatar ||
-            "assets/avatar.svg"
-          ),
-          req.user.id
-        ]);
+        `,
+          [
+            String(
+              email
+            ).trim(),
+
+            String(
+              birth_date
+            ),
+
+            String(
+              city
+            ).trim(),
+
+            String(
+              avatar ||
+              "assets/avatar.svg"
+            ),
+
+            req.user.id
+          ]
+        );
       }
 
       const rows =
-        await db(`
+        await db(
+          `
           SELECT
             id,
             username,
@@ -4070,11 +5650,20 @@ app.put(
             last_seen
           FROM users
           WHERE id = $1
-        `, [req.user.id]);
+        `,
+          [
+            req.user.id
+          ]
+        );
 
       res.json({
-        success: true,
-        user: safeUser(rows[0])
+        success:
+          true,
+
+        user:
+          safeUser(
+            rows[0]
+          )
       });
     } catch (e) {
       console.error(
@@ -4082,10 +5671,12 @@ app.put(
         e
       );
 
-      res.status(500).json({
-        error:
-          "Profilni saqlashda xato"
-      });
+      res
+        .status(500)
+        .json({
+          error:
+            "Profilni saqlashda xato"
+        });
     }
   }
 );
@@ -4097,20 +5688,30 @@ app.put(
 app.get(
   "/api/chat/history",
   requireUser,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     const rows =
-      await db(`
+      await db(
+        `
         SELECT id, sender, text,
                created_at
         FROM messages
         WHERE user_id = $1
         ORDER BY created_at ASC
         LIMIT 300
-      `, [req.user.id]);
+      `,
+        [
+          req.user.id
+        ]
+      );
 
     res.json({
-      success: true,
-      messages: rows
+      success:
+        true,
+      messages:
+        rows
     });
   }
 );
@@ -4118,7 +5719,10 @@ app.get(
 app.post(
   "/api/chat",
   requireUser,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     try {
       const text =
         String(
@@ -4128,20 +5732,27 @@ app.post(
         ).trim();
 
       if (!text) {
-        return res.status(400).json({
-          error:
-            "Xabar bo'sh"
-        });
+        return res
+          .status(400)
+          .json({
+            error:
+              "Xabar bo'sh"
+          });
       }
 
       const previous =
-        await db(`
+        await db(
+          `
           SELECT sender, text
           FROM messages
           WHERE user_id = $1
           ORDER BY created_at DESC
           LIMIT 40
-        `, [req.user.id]);
+        `,
+          [
+            req.user.id
+          ]
+        );
 
       const history =
         previous.reverse();
@@ -4160,7 +5771,9 @@ app.post(
         `UPDATE users
          SET last_seen = NOW()
          WHERE id = $1`,
-        [req.user.id]
+        [
+          req.user.id
+        ]
       );
 
       // ========================================================
@@ -4168,11 +5781,16 @@ app.post(
       // ========================================================
 
       const dateTimeAnswer =
-        getDateTimeAnswer(text);
+        getDateTimeAnswer(
+          text
+        );
 
-      if (dateTimeAnswer) {
+      if (
+        dateTimeAnswer
+      ) {
         const saved =
-          await db(`
+          await db(
+            `
             INSERT INTO messages
               (user_id, sender, text)
             VALUES
@@ -4180,18 +5798,26 @@ app.post(
             RETURNING
               id, sender, text,
               created_at
-          `, [
-            req.user.id,
-            dateTimeAnswer.answer
-          ]);
+          `,
+            [
+              req.user.id,
+              dateTimeAnswer.answer
+            ]
+          );
 
         return res.json({
-          success: true,
+          success:
+            true,
+
           answer:
             dateTimeAnswer.answer,
+
           source:
             dateTimeAnswer.source,
-          matched_knowledge: [],
+
+          matched_knowledge:
+            [],
+
           message:
             saved[0]
         });
@@ -4202,11 +5828,14 @@ app.post(
       // ========================================================
 
       const calc =
-        tryCalculate(text);
+        tryCalculate(
+          text
+        );
 
       if (calc) {
         const saved =
-          await db(`
+          await db(
+            `
             INSERT INTO messages
               (user_id, sender, text)
             VALUES
@@ -4214,44 +5843,63 @@ app.post(
             RETURNING
               id, sender, text,
               created_at
-          `, [
-            req.user.id,
-            calc.answer
-          ]);
+          `,
+            [
+              req.user.id,
+              calc.answer
+            ]
+          );
 
         return res.json({
-          success: true,
+          success:
+            true,
+
           answer:
             calc.answer,
+
           source:
             "calculator",
-          matched_knowledge: [],
+
+          matched_knowledge:
+            [],
+
           calculation: {
             expression:
               calc.expression,
+
             result:
               calc.result
           },
+
           message:
             saved[0]
         });
       }
 
       // ========================================================
-      // 2. LIBRETRANSLATE
+      // 2. TRANSLATOR
       // ========================================================
 
       const translationRequest =
-        findTranslationIntent(text);
+        findTranslationIntent(
+          text
+        );
 
-      if (translationRequest) {
+      if (
+        translationRequest
+      ) {
         try {
           const translated =
-            await tryTranslate(text);
+            await tryTranslate(
+              text
+            );
 
-          if (translated) {
+          if (
+            translated
+          ) {
             const saved =
-              await db(`
+              await db(
+                `
                 INSERT INTO messages
                   (user_id, sender, text)
                 VALUES
@@ -4259,38 +5907,51 @@ app.post(
                 RETURNING
                   id, sender, text,
                   created_at
-              `, [
-                req.user.id,
-                translated.translated
-              ]);
+              `,
+                [
+                  req.user.id,
+                  translated.translated
+                ]
+              );
 
             return res.json({
-              success: true,
+              success:
+                true,
+
               answer:
                 translated.translated,
+
               source:
-                "libretranslate",
-              matched_knowledge: [],
+                "translator",
+
+              matched_knowledge:
+                [],
+
               translation: {
                 source_text:
                   translated.sourceText,
+
                 target_language:
                   translated.targetCode,
+
                 detected_source_language:
-                  translated.detectedSource || null
+                  translated.detectedSource ||
+                  null
               },
+
               message:
                 saved[0]
             });
           }
         } catch (e) {
           console.error(
-            "LIBRETRANSLATE ERROR:",
+            "TRANSLATOR ERROR:",
             e.message
           );
 
           const saved =
-            await db(`
+            await db(
+              `
               INSERT INTO messages
                 (user_id, sender, text)
               VALUES
@@ -4298,18 +5959,29 @@ app.post(
               RETURNING
                 id, sender, text,
                 created_at
-            `, [
-              req.user.id,
-              `Tarjima xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring.`
-            ]);
+            `,
+              [
+                req.user.id,
+                "Tarjima xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring."
+              ]
+            );
 
           return res.json({
-            success: true,
+            success:
+              true,
+
             answer:
               "Tarjima xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring.",
+
             source:
-              "libretranslate_error",
-            matched_knowledge: [],
+              "translator_error",
+
+            error:
+              e.message,
+
+            matched_knowledge:
+              [],
+
             message:
               saved[0]
           });
@@ -4331,7 +6003,9 @@ app.post(
           matches
         );
 
-      let answer = null;
+      let answer =
+        null;
+
       let source =
         "unknown";
 
@@ -4363,15 +6037,20 @@ app.post(
             );
 
           if (wiki) {
-            const parts = [];
+            const parts =
+              [];
 
-            if (wiki.description) {
+            if (
+              wiki.description
+            ) {
               parts.push(
                 wiki.description
               );
             }
 
-            if (wiki.extract) {
+            if (
+              wiki.extract
+            ) {
               parts.push(
                 wiki.extract
               );
@@ -4379,10 +6058,14 @@ app.post(
 
             const wikiText =
               parts
-                .join("\n\n")
+                .join(
+                  "\n\n"
+                )
                 .trim();
 
-            if (wikiText) {
+            if (
+              wikiText
+            ) {
               answer =
                 `${wiki.title}\n\n` +
                 `${wikiText}`;
@@ -4412,9 +6095,13 @@ app.post(
         const usefulContext =
           matches
             .filter(
-              x => x.score >= 75
+              x =>
+                x.score >= 75
             )
-            .slice(0, 4);
+            .slice(
+              0,
+              4
+            );
 
         try {
           answer =
@@ -4449,7 +6136,8 @@ app.post(
       }
 
       const saved =
-        await db(`
+        await db(
+          `
           INSERT INTO messages
             (user_id, sender, text)
           VALUES
@@ -4457,26 +6145,40 @@ app.post(
           RETURNING
             id, sender, text,
             created_at
-        `, [
-          req.user.id,
-          answer
-        ]);
+        `,
+          [
+            req.user.id,
+            answer
+          ]
+        );
 
       res.json({
-        success: true,
+        success:
+          true,
+
         answer,
+
         source,
+
         matched_knowledge:
           matches
-            .slice(0, 3)
-            .map(x => ({
-              id: x.id,
-              title: x.title,
-              question:
-                x.question,
-              score:
-                x.score
-            })),
+            .slice(
+              0,
+              3
+            )
+            .map(
+              x => ({
+                id:
+                  x.id,
+                title:
+                  x.title,
+                question:
+                  x.question,
+                score:
+                  x.score
+              })
+            ),
+
         message:
           saved[0]
       });
@@ -4487,10 +6189,12 @@ app.post(
         e
       );
 
-      res.status(500).json({
-        error:
-          "Chat server xatosi"
-      });
+      res
+        .status(500)
+        .json({
+          error:
+            "Chat server xatosi"
+        });
     }
   }
 );
@@ -4502,7 +6206,10 @@ app.post(
 app.get(
   "/api/admin/stats",
   requireAdmin,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     const [m, k, u] =
       await Promise.all([
         db(`
@@ -4523,11 +6230,15 @@ app.get(
       ]);
 
     res.json({
-      success: true,
+      success:
+        true,
+
       messages:
         m[0].n,
+
       knowledge:
         k[0].n,
+
       users:
         u[0].n
     });
@@ -4537,7 +6248,10 @@ app.get(
 app.get(
   "/api/admin/improve",
   requireAdmin,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     const rows =
       await db(`
         SELECT
@@ -4552,8 +6266,11 @@ app.get(
       `);
 
     res.json({
-      success: true,
-      suggestions: rows
+      success:
+        true,
+
+      suggestions:
+        rows
     });
   }
 );
@@ -4561,7 +6278,10 @@ app.get(
 app.post(
   "/api/admin/improve/analyze",
   requireAdmin,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     const rows =
       await db(`
         SELECT text
@@ -4574,30 +6294,59 @@ app.post(
     const counts =
       new Map();
 
-    for (const row of rows) {
+    for (
+      const row
+      of rows
+    ) {
       const ws =
-        tokenize(row.text)
+        tokenize(
+          row.text
+        )
           .filter(
-            w => w.length >= 5
+            w =>
+              w.length >= 5
           );
 
-      for (const w of ws) {
+      for (
+        const w
+        of ws
+      ) {
         counts.set(
           w,
-          (counts.get(w) || 0) + 1
+          (
+            counts.get(w) ||
+            0
+          ) + 1
         );
       }
     }
 
     const top =
-      [...counts.entries()]
+      [
+        ...counts.entries()
+      ]
         .sort(
-          (a, b) => b[1] - a[1]
+          (a, b) =>
+            b[1] -
+            a[1]
         )
-        .slice(0, 10);
+        .slice(
+          0,
+          10
+        );
 
-    for (const [topic, count] of top) {
-      if (count < 3) continue;
+    for (
+      const [
+        topic,
+        count
+      ]
+      of top
+    ) {
+      if (
+        count < 3
+      ) {
+        continue;
+      }
 
       const exists =
         await db(
@@ -4612,10 +6361,14 @@ app.post(
              LOWER($1) ||
              '%'
            LIMIT 1`,
-          [topic]
+          [
+            topic
+          ]
         );
 
-      if (!exists.length) {
+      if (
+        !exists.length
+      ) {
         await db(
           `INSERT INTO suggestions
              (title, text)
@@ -4623,6 +6376,7 @@ app.post(
              ($1, $2)`,
           [
             "Ko‘p so‘raladigan mavzu",
+
             `Mijozlar “${topic}” mavzusini ${count} marta tilga oldi. Shu mavzu bo‘yicha aniq bilim qo‘shish foydali.`
           ]
         );
@@ -4630,7 +6384,8 @@ app.post(
     }
 
     res.json({
-      success: true
+      success:
+        true
     });
   }
 );
@@ -4638,7 +6393,10 @@ app.post(
 app.post(
   "/api/admin/improve/:id/approve",
   requireAdmin,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     const rows =
       await db(
         `SELECT id, title, text
@@ -4646,15 +6404,21 @@ app.post(
          WHERE id = $1
            AND status = 'pending'`,
         [
-          Number(req.params.id)
+          Number(
+            req.params.id
+          )
         ]
       );
 
-    if (!rows.length) {
-      return res.status(404).json({
-        error:
-          "Taklif topilmadi"
-      });
+    if (
+      !rows.length
+    ) {
+      return res
+        .status(404)
+        .json({
+          error:
+            "Taklif topilmadi"
+        });
     }
 
     const s =
@@ -4676,11 +6440,14 @@ app.post(
       `UPDATE suggestions
        SET status = 'approved'
        WHERE id = $1`,
-      [s.id]
+      [
+        s.id
+      ]
     );
 
     res.json({
-      success: true
+      success:
+        true
     });
   }
 );
@@ -4688,16 +6455,24 @@ app.post(
 app.post(
   "/api/admin/improve/:id/reject",
   requireAdmin,
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
     await db(
       `UPDATE suggestions
        SET status = 'rejected'
        WHERE id = $1`,
-      [Number(req.params.id)]
+      [
+        Number(
+          req.params.id
+        )
+      ]
     );
 
     res.json({
-      success: true
+      success:
+        true
     });
   }
 );
@@ -4707,7 +6482,9 @@ app.post(
 // ============================================================
 
 app.use(
-  express.static(__dirname)
+  express.static(
+    __dirname
+  )
 );
 
 initDb()
@@ -4726,7 +6503,8 @@ initDb()
 
         console.log(
           `Gemini API key: ${
-            process.env.GEMINI_API_KEY
+            process.env
+              .GEMINI_API_KEY
               ? "configured"
               : "NOT configured"
           }`
@@ -4744,7 +6522,7 @@ initDb()
         );
 
         console.log(
-          "LibreTranslate: enabled"
+          "Translator: Google public + LibreTranslate fallback enabled"
         );
 
         console.log(
@@ -4765,14 +6543,16 @@ initDb()
       }
     );
   })
-  .catch(error => {
-    console.error(
-      "DATABASE INIT ERROR:",
-      error
-    );
+  .catch(
+    error => {
+      console.error(
+        "DATABASE INIT ERROR:",
+        error
+      );
 
-    process.exit(1);
-  });
+      process.exit(1);
+    }
+  );
 
 process.on(
   "SIGTERM",
