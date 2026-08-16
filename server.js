@@ -2678,6 +2678,314 @@ function tryCalculate(text) {
   }
 }
 
+
+// ============================================================
+// GOOGLE TRANSLATE
+// ============================================================
+
+const TRANSLATION_LANGUAGES = {
+  uz: ["uzbek", "uzbekcha", "ozbek", "ozbekcha", "o'zbek", "o'zbekcha", "узбек", "узбекский"],
+  ru: ["rus", "ruscha", "ruscha", "russian", "русский", "русcha"],
+  en: ["ingliz", "inglizcha", "english", "английский", "ангlich"],
+  kk: ["qozoq", "qozoqcha", "kazakh", "қазақ", "казахский"],
+  tr: ["turk", "turkcha", "turkish", "türkçe", "турецкий"],
+  tg: ["tojik", "tojikcha", "tajik", "тоҷик", "таджикский"],
+  ar: ["arab", "arabcha", "arabic", "арабский", "العربية"],
+  de: ["nemis", "nemischa", "german", "deutsch", "немецкий"],
+  fr: ["fransuz", "fransuzcha", "french", "français", "французский"],
+  es: ["ispan", "ispancha", "spanish", "español", "испанский"],
+  it: ["italyan", "italyancha", "italian", "italiano", "итальянский"],
+  zh: ["xitoy", "xitoycha", "chinese", "中文", "китайский"],
+  ko: ["koreys", "koreyscha", "korean", "한국어", "корейский"],
+  ja: ["yapon", "yaponcha", "japanese", "日本語", "японский"],
+  hi: ["hind", "hindcha", "hindi", "हिन्दी", "индийский"],
+  pt: ["portugal", "portugalcha", "portuguese", "português", "португальский"]
+};
+
+function normalizeTranslationText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[ʻ’‘`´]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function translationLanguageCode(input) {
+  const value = normalizeTranslationText(input);
+
+  if (!value) return null;
+
+  let bestCode = null;
+  let bestScore = 0;
+
+  for (const [code, aliases] of Object.entries(TRANSLATION_LANGUAGES)) {
+    for (const alias of aliases) {
+      const a = normalize(alias);
+
+      if (value === a) {
+        return code;
+      }
+
+      if (value.includes(a)) {
+        bestCode = code;
+        bestScore = Math.max(bestScore, 100);
+        continue;
+      }
+
+      const distance = levenshtein(value, a);
+
+      if (distance <= 1) {
+        if (95 > bestScore) {
+          bestCode = code;
+          bestScore = 95;
+        }
+      } else if (distance <= 2) {
+        if (85 > bestScore) {
+          bestCode = code;
+          bestScore = 85;
+        }
+      } else if (distance <= 3 && a.length >= 6) {
+        if (70 > bestScore) {
+          bestCode = code;
+          bestScore = 70;
+        }
+      }
+    }
+  }
+
+  return bestCode;
+}
+
+function extractTranslationTarget(text) {
+  const q = normalizeTranslationText(text);
+
+  const patterns = [
+    /(?:rus(?:cha|ga)?|russ(?:ian)?|рус(?:ский|ский язык))$/i,
+    /(?:ingliz(?:cha|ga)?|english|англий(?:ский|ский язык))$/i,
+    /(?:uzbek(?:cha|ga)?|ozbek(?:cha|ga)?|o'zbek(?:cha|ga)?|узбек(?:ский|ский язык))$/i,
+    /(?:qozoq(?:cha|ga)?|kazakh|қазақ(?:ша)?|казах(?:ский|ский язык))$/i,
+    /(?:turk(?:cha|ga)?|turkish|türkçe|турец(?:кий|кий язык))$/i,
+    /(?:tojik(?:cha|ga)?|tajik|тоҷик(?:ӣ)?|таджик(?:ский|ский язык))$/i,
+    /(?:arab(?:cha|ga)?|arabic|العربية|араб(?:ский|ский язык))$/i,
+    /(?:nemis(?:cha|ga)?|german|deutsch|немец(?:кий|кий язык))$/i,
+    /(?:fransuz(?:cha|ga)?|french|français|француз(?:ский|ский язык))$/i,
+    /(?:ispan(?:cha|ga)?|spanish|español|испан(?:ский|ский язык))$/i,
+    /(?:italyan(?:cha|ga)?|italian|italiano|итальян(?:ский|ский язык))$/i,
+    /(?:xitoy(?:cha|ga)?|chinese|中文|китай(?:ский|ский язык))$/i,
+    /(?:koreys(?:cha|ga)?|korean|한국어|корей(?:ский|ский язык))$/i,
+    /(?:yapon(?:cha|ga)?|japanese|日本語|япон(?:ский|ский язык))$/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = q.match(pattern);
+
+    if (match) {
+      const code = translationLanguageCode(match[0]);
+      if (code) return code;
+    }
+  }
+
+  const words = q.split(/\s+/);
+
+  for (let size = Math.min(3, words.length); size >= 1; size--) {
+    const candidate = words.slice(-size).join(" ");
+    const code = translationLanguageCode(candidate);
+
+    if (code) return code;
+  }
+
+  return null;
+}
+
+function removeTranslationCommand(text, targetCode) {
+  let value = String(text || "").trim();
+
+  const languageAliases = [];
+
+  for (const [code, aliases] of Object.entries(TRANSLATION_LANGUAGES)) {
+    if (code === targetCode) {
+      languageAliases.push(...aliases);
+    }
+  }
+
+  for (const alias of languageAliases.sort((a, b) => b.length - a.length)) {
+    const escaped = alias
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    value = value.replace(
+      new RegExp(
+        `(?:\\b(?:${escaped})\\b)(?:\\s+til(?:iga)?|\\s+language)?\\s*$`,
+        "iu"
+      ),
+      ""
+    );
+  }
+
+  value = value
+    .replace(
+      /^(?:shu\s+gapni|shu\s+matnni|shu\s+matn|shu\s+gap|matnni|gapni)\s*/iu,
+      ""
+    )
+    .replace(
+      /^(?:tarjima\s+qil|tarjima\s+qilib\s+ber|tarjima|o'gir|ogir|o'girish|ogirish|perevod\s+qil|perevod|perevot\s+qil|perevot|переведи|перевод)\s*:?\s*/iu,
+      ""
+    )
+    .replace(
+      /^(?:inglizchaga|ruschaga|uzbekchaga|o'zbekchaga|ozbekchaga|qozoqchaga|turkchaga|tojikchaga|arabchaga|nemischaga|fransuzchaga|ispanchaga|italyanchaga|xitoychaga|koreyschaga|yaponchaga)\s*/iu,
+      ""
+    )
+    .replace(
+      /^(?:to|into|на|на\s+язык|к|для)\s+/iu,
+      ""
+    )
+    .trim();
+
+  const colon = value.indexOf(":");
+  if (colon >= 0 && colon < 80) {
+    const left = normalizeTranslationText(value.slice(0, colon));
+
+    if (
+      /tarjima|o'gir|ogir|perevod|perevot|переведи|translate|tiliga|tiliga/i.test(left)
+    ) {
+      value = value.slice(colon + 1).trim();
+    }
+  }
+
+  // "hello ni ruscha qil" / "salomni rus tiliga o'gir"
+  value = value
+    .replace(
+      /\s+(?:ni|nı)\s*$/iu,
+      ""
+    )
+    .trim();
+
+  return value;
+}
+
+function findTranslationIntent(text) {
+  const original = String(text || "").trim();
+
+  if (!original) return null;
+
+  const q = normalizeTranslationText(original);
+
+  const hasCommand =
+    /(?:tarjima|o'gir|ogir|perevod|perevot|translate|перевод|переведи)/iu.test(q);
+
+  const hasTarget =
+    /(?:ruscha|rus til|inglizcha|ingliz til|uzbekcha|o'zbekcha|ozbekcha|qozoqcha|turkcha|tojikcha|arabcha|nemischa|fransuzcha|ispancha|italyancha|xitoycha|koreyscha|yaponcha|russian|english|узбек|русский|английский|қазақ|turkish|german|french|spanish|italian|chinese|korean|japanese)/iu
+      .test(q);
+
+  if (!hasCommand && !hasTarget) {
+    return null;
+  }
+
+  const targetCode =
+    extractTranslationTarget(original);
+
+  if (!targetCode) {
+    return null;
+  }
+
+  let sourceText =
+    removeTranslationCommand(
+      original,
+      targetCode
+    );
+
+  if (!sourceText) {
+    return null;
+  }
+
+  return {
+    targetCode,
+    sourceText
+  };
+}
+
+async function translateWithGoogle(sourceText, targetCode) {
+  const apiKey =
+    String(
+      process.env.GOOGLE_TRANSLATE_API_KEY || ""
+    ).trim();
+
+  if (!apiKey) {
+    throw new Error(
+      "GOOGLE_TRANSLATE_API_KEY sozlanmagan"
+    );
+  }
+
+  const url =
+    `https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(apiKey)}`;
+
+  const response =
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json"
+      },
+      body: JSON.stringify({
+        q: sourceText,
+        target: targetCode,
+        format: "text"
+      })
+    });
+
+  const data =
+    await response.json()
+      .catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error?.message ||
+      `Google Translate HTTP ${response.status}`
+    );
+  }
+
+  const translated =
+    data?.data?.translations?.[0]?.translatedText;
+
+  if (!translated) {
+    throw new Error(
+      "Google Translate javob qaytarmadi"
+    );
+  }
+
+  return {
+    text: String(translated),
+    detectedSource:
+      data?.data?.translations?.[0]?.detectedSourceLanguage || ""
+  };
+}
+
+async function tryTranslate(text) {
+  const intent =
+    findTranslationIntent(text);
+
+  if (!intent) {
+    return null;
+  }
+
+  const result =
+    await translateWithGoogle(
+      intent.sourceText,
+      intent.targetCode
+    );
+
+  return {
+    sourceText:
+      intent.sourceText,
+    targetCode:
+      intent.targetCode,
+    translated:
+      result.text,
+    detectedSource:
+      result.detectedSource
+  };
+}
+
+
 // ============================================================
 // GEMINI
 // ============================================================
@@ -2861,6 +3169,10 @@ app.get("/api/health", async (req, res) => {
       gemini:
         Boolean(
           process.env.GEMINI_API_KEY
+        ),
+      google_translate:
+        Boolean(
+          process.env.GOOGLE_TRANSLATE_API_KEY
         ),
       model:
         process.env.GEMINI_MODEL ||
@@ -3582,7 +3894,68 @@ app.post(
       }
 
       // ========================================================
-      // 2. QAMIR BILIM BAZASI
+      // 2. GOOGLE TRANSLATE
+      // ========================================================
+
+      const translationRequest =
+        findTranslationIntent(text);
+
+      if (translationRequest) {
+        try {
+          const translated =
+            await tryTranslate(text);
+
+          if (translated) {
+            const saved =
+              await db(`
+                INSERT INTO messages
+                  (user_id, sender, text)
+                VALUES
+                  ($1, 'assistant', $2)
+                RETURNING
+                  id, sender, text,
+                  created_at
+              `, [
+                req.user.id,
+                translated.translated
+              ]);
+
+            return res.json({
+              success: true,
+              answer:
+                translated.translated,
+              source:
+                "google_translate",
+              matched_knowledge: [],
+              translation: {
+                source_text:
+                  translated.sourceText,
+                target_language:
+                  translated.targetCode,
+                detected_source_language:
+                  translated.detectedSource || null
+              },
+              message:
+                saved[0]
+            });
+          }
+        } catch (e) {
+          console.error(
+            "GOOGLE TRANSLATE ERROR:",
+            e.message
+          );
+
+          if (
+            e.message ===
+            "GOOGLE_TRANSLATE_API_KEY sozlanmagan"
+          ) {
+            // API kaliti bo'lmasa pastdagi mavjud Gemini/knowledge tizimi davom etadi.
+          }
+        }
+      }
+
+      // ========================================================
+      // 3. QAMIR BILIM BAZASI
       // ========================================================
 
       const matches =
@@ -4007,6 +4380,14 @@ initDb()
 
         console.log(
           "Advanced calculator: enabled"
+        );
+
+        console.log(
+          `Google Translate: ${
+            process.env.GOOGLE_TRANSLATE_API_KEY
+              ? "configured"
+              : "NOT configured"
+          }`
         );
 
         console.log(
