@@ -761,12 +761,8 @@ function cleanWikipediaQuery(text) {
     .trim()
     .replace(/[?!.]+$/g, "")
     .replace(
-      /\s+(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi)\s*$/i,
-      ""
-    )
-    .replace(
-      /^(?:kim|kimdir)\s+/i,
-      ""
+      /\b(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi)\b/gi,
+      " "
     )
     .replace(/\s+/g, " ")
     .trim();
@@ -781,65 +777,43 @@ function looksLikeWikipediaQuestion(text) {
     return false;
   }
 
-  const patterns = [
-    " kim",
-    " kimdir",
-    " haqida",
-    " togri sida",
-    " togrisida",
-    " biografiya",
-    " tarjimai holi",
-    " kim yaratgan",
-    " kim asos solgan",
-    " kim ixtiro qilgan",
-    " qachon",
-    " qayerda"
+  const explicitPatterns = [
+    /\bkim\b/i,
+    /\bkimdir\b/i,
+    /\bhaqida\b/i,
+    /\btogrisida\b/i,
+    /\bbiografiya\b/i,
+    /\btarjimai holi\b/i,
+    /\bkim yaratgan\b/i,
+    /\bkim asos solgan\b/i,
+    /\bkim ixtiro qilgan\b/i,
+    /\bqachon vafot etgan\b/i,
+    /\bqachon tugilgan\b/i,
+    /\bqayerda tugilgan\b/i
   ];
 
-  if (
-    q.startsWith("kim ") ||
-    q.endsWith(" kim") ||
-    q.endsWith(" kimdir")
-  ) {
-    return true;
-  }
-
-  if (patterns.some(pattern => q.includes(pattern))) {
-    return true;
-  }
-
-  const wordsList = tokenizeRaw(q);
-
-  return (
-    wordsList.length >= 2 &&
-    wordsList.length <= 7 &&
-    !/[0-9]/.test(q)
+  return explicitPatterns.some(pattern =>
+    pattern.test(q)
   );
 }
 
 function cleanWikipediaHtml(text) {
   return String(text || "")
+    .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<span[^>]*>/gi, "")
     .replace(/<\/span>/gi, "")
     .replace(/<[^>]*>/g, "")
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
+    .replace(/&#160;/g, " ")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n\s+/g, "\n")
+    .replace(/[ \t]+/g, " ")
     .trim();
-}
-
-function titleWordsSimilar(queryWord, title) {
-  const wordsList = tokenizeRaw(title);
-
-  return wordsList.some(word =>
-    word === queryWord ||
-    word.startsWith(queryWord) ||
-    queryWord.startsWith(word) ||
-    levenshtein(queryWord, word) <= 2
-  );
 }
 
 function scoreWikipediaTitle(query, title) {
@@ -861,21 +835,21 @@ function scoreWikipediaTitle(query, title) {
 
     for (const tw of tWords) {
       if (qw === tw) {
-        best = Math.max(best, 60);
+        best = Math.max(best, 100);
       } else if (
         qw.startsWith(tw) ||
         tw.startsWith(qw)
       ) {
-        best = Math.max(best, 45);
+        best = Math.max(best, 72);
       } else {
         const distance = levenshtein(qw, tw);
 
         if (distance === 1) {
-          best = Math.max(best, 38);
+          best = Math.max(best, 65);
         } else if (distance === 2) {
-          best = Math.max(best, 25);
+          best = Math.max(best, 48);
         } else if (distance === 3) {
-          best = Math.max(best, 10);
+          best = Math.max(best, 25);
         }
       }
     }
@@ -886,9 +860,14 @@ function scoreWikipediaTitle(query, title) {
     }
   }
 
-  const coverage = matched / qWords.length;
+  const coverage =
+    matched / Math.max(qWords.length, 1);
 
-  score += coverage * 40;
+  score += coverage * 80;
+
+  if (normalize(title) === normalize(query)) {
+    score += 250;
+  }
 
   return score;
 }
@@ -898,34 +877,175 @@ async function wikipediaSearchRaw(language, query, limit = 10) {
     `https://${language}.wikipedia.org`;
 
   const url =
-    `${base}/w/rest.php/v1/search/page` +
-    `?q=${encodeURIComponent(query)}` +
-    `&limit=${limit}`;
+    `${base}/w/api.php` +
+    `?action=query` +
+    `&list=search` +
+    `&srsearch=${encodeURIComponent(query)}` +
+    `&srnamespace=0` +
+    `&srlimit=${Math.min(50, Math.max(1, limit))}` +
+    `&srprop=snippet|titlesnippet|sectiontitle|categorysnippet` +
+    `&format=json` +
+    `&formatversion=2` +
+    `&origin=*`;
 
   const response = await fetch(url, {
     method: "GET",
     headers: {
       "User-Agent":
-        "QamirAI/1.0 (Qamir AI personal assistant)",
+        "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
       "Api-User-Agent":
         "QamirAI/1.0 (Qamir AI personal assistant)"
     }
   });
 
   if (!response.ok) {
+    const body = await response.text().catch(() => "");
+
     console.error(
-      `Wikipedia ${language} HTTP:`,
-      response.status
+      `Wikipedia ${language} HTTP ${response.status}:`,
+      body.slice(0, 500)
     );
 
-    return [];
+    return {
+      pages: [],
+      suggestion: ""
+    };
   }
 
-  const data = await response.json();
+  const data =
+    await response.json().catch(() => ({}));
 
-  return Array.isArray(data?.pages)
-    ? data.pages
-    : [];
+  const pages =
+    Array.isArray(data?.query?.search)
+      ? data.query.search.map(item => ({
+          title: item?.title || "",
+          pageid: item?.pageid || null,
+          snippet: cleanWikipediaHtml(
+            item?.snippet || ""
+          )
+        }))
+      : [];
+
+  const suggestion =
+    String(
+      data?.query?.searchinfo?.suggestion ||
+      ""
+    ).trim();
+
+  return {
+    pages,
+    suggestion
+  };
+}
+
+async function wikipediaGetPage(language, title) {
+  const base =
+    `https://${language}.wikipedia.org`;
+
+  const url =
+    `${base}/w/api.php` +
+    `?action=query` +
+    `&prop=extracts|info` +
+    `&exintro=1` +
+    `&explaintext=1` +
+    `&exchars=4000` +
+    `&inprop=url` +
+    `&redirects=1` +
+    `&titles=${encodeURIComponent(title)}` +
+    `&format=json` +
+    `&formatversion=2` +
+    `&origin=*`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "User-Agent":
+        "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
+      "Api-User-Agent":
+        "QamirAI/1.0 (Qamir AI personal assistant)"
+    }
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+
+    console.error(
+      `Wikipedia page ${language} HTTP ${response.status}:`,
+      body.slice(0, 500)
+    );
+
+    return null;
+  }
+
+  const data =
+    await response.json().catch(() => ({}));
+
+  const page =
+    Array.isArray(data?.query?.pages)
+      ? data.query.pages[0]
+      : null;
+
+  if (
+    !page ||
+    page.missing
+  ) {
+    return null;
+  }
+
+  const extract =
+    cleanWikipediaHtml(
+      page.extract || ""
+    );
+
+  if (!extract) {
+    return null;
+  }
+
+  return {
+    title:
+      String(page.title || title).trim(),
+    extract,
+    url:
+      String(page.fullurl || "").trim()
+  };
+}
+
+function makeWikipediaVariants(query, suggestion = "") {
+  const variants = [];
+  const seen = new Set();
+
+  function add(value) {
+    const v = String(value || "")
+      .trim()
+      .replace(/\s+/g, " ");
+
+    if (
+      v.length < 2 ||
+      seen.has(v.toLowerCase())
+    ) {
+      return;
+    }
+
+    seen.add(v.toLowerCase());
+    variants.push(v);
+  }
+
+  add(query);
+  add(suggestion);
+
+  const wordsList =
+    tokenizeRaw(query)
+      .filter(w => w.length >= 3);
+
+  if (wordsList.length > 1) {
+    add(wordsList.join(" "));
+  }
+
+  for (const word of wordsList) {
+    add(word);
+  }
+
+  return variants.slice(0, 8);
 }
 
 async function fetchWikipediaFromLanguage(language, query) {
@@ -935,32 +1055,69 @@ async function fetchWikipediaFromLanguage(language, query) {
       query
     );
 
-    let pages =
+    const first =
       await wikipediaSearchRaw(
         language,
         query,
         10
       );
 
-    console.log(
-      `Wikipedia ${language} natijalari:`,
-      pages.length
-    );
+    let allPages = [
+      ...(first.pages || [])
+    ];
 
-    if (!pages.length) {
-      const queryWords = tokenizeRaw(query)
-        .filter(w => w.length >= 3);
+    const variants =
+      makeWikipediaVariants(
+        query,
+        first.suggestion
+      );
 
-      for (const word of queryWords) {
+    if (
+      first.suggestion &&
+      first.suggestion.toLowerCase() !==
+        query.toLowerCase()
+    ) {
+      try {
+        const suggested =
+          await wikipediaSearchRaw(
+            language,
+            first.suggestion,
+            10
+          );
+
+        allPages.push(
+          ...(suggested.pages || [])
+        );
+      } catch (e) {
+        console.error(
+          "Wikipedia suggestion search error:",
+          e.message
+        );
+      }
+    }
+
+    if (
+      allPages.length < 3
+    ) {
+      for (const variant of variants.slice(0, 5)) {
+        if (
+          normalize(variant) ===
+          normalize(query)
+        ) {
+          continue;
+        }
+
         try {
-          const fallbackPages =
+          const result =
             await wikipediaSearchRaw(
               language,
-              word,
+              variant,
               10
             );
 
-          pages.push(...fallbackPages);
+          allPages.push(
+            ...(result.pages || [])
+          );
         } catch (e) {
           console.error(
             "Wikipedia fallback search error:",
@@ -970,21 +1127,21 @@ async function fetchWikipediaFromLanguage(language, query) {
       }
     }
 
-    if (!pages.length) {
-      return null;
-    }
-
     const uniquePages = [];
     const seenTitles = new Set();
 
-    for (const item of pages) {
-      const titleKey = normalize(
-        item?.title ||
-        item?.key ||
-        ""
-      );
+    for (const item of allPages) {
+      const title =
+        String(item?.title || "").trim();
 
-      if (!titleKey || seenTitles.has(titleKey)) {
+      const titleKey =
+        normalize(title);
+
+      if (
+        !title ||
+        !titleKey ||
+        seenTitles.has(titleKey)
+      ) {
         continue;
       }
 
@@ -992,111 +1149,66 @@ async function fetchWikipediaFromLanguage(language, query) {
       uniquePages.push(item);
     }
 
-    const normalizedQuery =
-      normalize(query);
+    if (!uniquePages.length) {
+      return null;
+    }
 
-    let page =
-      uniquePages.find(item =>
-        normalize(
-          item?.title ||
-          item?.key ||
-          ""
-        ) === normalizedQuery
-      );
+    let bestPage = null;
+    let bestScore = -1;
 
-    if (!page) {
-      let bestPage = null;
-      let bestScore = 0;
-
-      for (const candidate of uniquePages) {
-        const title = String(
-          candidate?.title ||
-          candidate?.key ||
-          ""
+    for (const candidate of uniquePages) {
+      const title =
+        String(
+          candidate?.title || ""
         ).trim();
 
-        const score =
-          scoreWikipediaTitle(
-            query,
-            title
-          );
+      const score =
+        scoreWikipediaTitle(
+          query,
+          title
+        );
 
-        if (score > bestScore) {
-          bestScore = score;
-          bestPage = candidate;
-        }
-      }
-
-      if (bestPage && bestScore >= 60) {
-        page = bestPage;
+      if (
+        score > bestScore
+      ) {
+        bestScore = score;
+        bestPage = candidate;
       }
     }
 
-    if (!page) {
-      const firstUsable = uniquePages.find(candidate => {
-        const title = String(
-          candidate?.title ||
-          candidate?.key ||
-          ""
-        ).trim();
-
-        return scoreWikipediaTitle(query, title) >= 45;
-      });
-
-      page = firstUsable || null;
-    }
-
-    if (!page) {
+    if (
+      !bestPage ||
+      bestScore < 70
+    ) {
       console.log(
-        `Wikipedia [${language}]: mos sahifa topilmadi`
+        `Wikipedia [${language}]: mos keluvchi sahifa topilmadi. Eng yaxshi score=${bestScore}`
       );
 
       return null;
     }
 
-    const title =
-      String(
-        page.title ||
-        page.key ||
-        query
-      ).trim();
-
-    const description =
-      cleanWikipediaHtml(
-        page.description ||
-        ""
+    const page =
+      await wikipediaGetPage(
+        language,
+        bestPage.title
       );
 
-    const excerpt =
-      cleanWikipediaHtml(
-        page.excerpt ||
-        ""
-      );
-
-    const key =
-      String(
-        page.key ||
-        title
-      ).replace(/ /g, "_");
-
-    const wikiUrl =
-      `${base}/wiki/${encodeURIComponent(key)}`;
+    if (!page) {
+      return null;
+    }
 
     console.log(
       `Wikipedia topildi [${language}]:`,
-      title
+      page.title,
+      `score=${bestScore}`
     );
-
-    if (!description && !excerpt) {
-      return null;
-    }
 
     return {
       language,
-      title,
-      description,
-      extract: excerpt,
-      url: wikiUrl
+      title: page.title,
+      description: "",
+      extract: page.extract,
+      url: page.url
     };
 
   } catch (error) {
@@ -1111,21 +1223,16 @@ async function fetchWikipediaFromLanguage(language, query) {
 
 async function searchWikipedia(userText) {
   if (!looksLikeWikipediaQuestion(userText)) {
-    console.log(
-      "Wikipedia: savol mos emas."
-    );
-
     return null;
   }
 
   const query =
     cleanWikipediaQuery(userText);
 
-  if (!query || query.length < 2) {
-    console.log(
-      "Wikipedia: query bo'sh."
-    );
-
+  if (
+    !query ||
+    query.length < 2
+  ) {
     return null;
   }
 
@@ -1146,12 +1253,6 @@ async function searchWikipedia(userText) {
         "en",
         query
       );
-  }
-
-  if (!result) {
-    console.log(
-      "Wikipedia: natija topilmadi."
-    );
   }
 
   return result;
@@ -1205,15 +1306,28 @@ function radToDeg(x) {
 }
 
 function normalizeMathQuestion(text) {
-  return String(text || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[ʻ’‘`´]/g, "")
-    .replace(/[−–—]/g, "-")
-    .replace(/[×✕]/g, "*")
-    .replace(/÷/g, "/")
-    .replace(/,/g, ".")
-    .replace(/\s+/g, " ");
+  let q =
+    String(text || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[ʻ’‘`´]/g, "")
+      .replace(/[−–—]/g, "-")
+      .replace(/[×✕]/g, "*")
+      .replace(/÷/g, "/")
+      .replace(/\s+/g, " ");
+
+  const hasFunctionArguments =
+    /[a-zA-Z]+\s*\([^)]*,/.test(q);
+
+  if (!hasFunctionArguments) {
+    q =
+      q.replace(
+        /(\d)\s*,\s*(\d)/g,
+        "$1.$2"
+      );
+  }
+
+  return q;
 }
 
 function calculatePercentage(text) {
@@ -1224,7 +1338,7 @@ function calculatePercentage(text) {
   let m;
 
   m = q.match(
-    /^(-?\d+(?:\.\d+)?)\s+ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s*(?:qancha|necha|bo'ladi|boladi)?$/i
+    /^(-?\d+(?:\.\d+)?)\s*ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s*(?:qancha|necha|bo'ladi|boladi)?$/i
   );
 
   if (m) {
@@ -1240,7 +1354,7 @@ function calculatePercentage(text) {
   }
 
   m = q.match(
-    /^(?:hisobla|hisoblab\s+ber|top|aniqla)\s+(-?\d+(?:\.\d+)?)\s+ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)$/i
+    /^(?:hisobla|hisoblab\s+ber|top|aniqla)\s+(-?\d+(?:\.\d+)?)\s*ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)$/i
   );
 
   if (m) {
