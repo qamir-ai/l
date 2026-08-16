@@ -804,8 +804,16 @@ function looksLikeWikipediaQuestion(text) {
     return true;
   }
 
-  return patterns.some(pattern =>
-    q.includes(pattern)
+  if (patterns.some(pattern => q.includes(pattern))) {
+    return true;
+  }
+
+  const wordsList = tokenizeRaw(q);
+
+  return (
+    wordsList.length >= 2 &&
+    wordsList.length <= 7 &&
+    !/[0-9]/.test(q)
   );
 }
 
@@ -823,47 +831,116 @@ function cleanWikipediaHtml(text) {
     .trim();
 }
 
+function titleWordsSimilar(queryWord, title) {
+  const wordsList = tokenizeRaw(title);
+
+  return wordsList.some(word =>
+    word === queryWord ||
+    word.startsWith(queryWord) ||
+    queryWord.startsWith(word) ||
+    levenshtein(queryWord, word) <= 2
+  );
+}
+
+function scoreWikipediaTitle(query, title) {
+  const qWords = tokenizeRaw(query)
+    .filter(w => w.length >= 2);
+
+  const tWords = tokenizeRaw(title)
+    .filter(w => w.length >= 2);
+
+  if (!qWords.length || !tWords.length) {
+    return 0;
+  }
+
+  let score = 0;
+  let matched = 0;
+
+  for (const qw of qWords) {
+    let best = 0;
+
+    for (const tw of tWords) {
+      if (qw === tw) {
+        best = Math.max(best, 60);
+      } else if (
+        qw.startsWith(tw) ||
+        tw.startsWith(qw)
+      ) {
+        best = Math.max(best, 45);
+      } else {
+        const distance = levenshtein(qw, tw);
+
+        if (distance === 1) {
+          best = Math.max(best, 38);
+        } else if (distance === 2) {
+          best = Math.max(best, 25);
+        } else if (distance === 3) {
+          best = Math.max(best, 10);
+        }
+      }
+    }
+
+    if (best > 0) {
+      matched++;
+      score += best;
+    }
+  }
+
+  const coverage = matched / qWords.length;
+
+  score += coverage * 40;
+
+  return score;
+}
+
+async function wikipediaSearchRaw(language, query, limit = 10) {
+  const base =
+    `https://${language}.wikipedia.org`;
+
+  const url =
+    `${base}/w/rest.php/v1/search/page` +
+    `?q=${encodeURIComponent(query)}` +
+    `&limit=${limit}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "User-Agent":
+        "QamirAI/1.0 (Qamir AI personal assistant)",
+      "Api-User-Agent":
+        "QamirAI/1.0 (Qamir AI personal assistant)"
+    }
+  });
+
+  if (!response.ok) {
+    console.error(
+      `Wikipedia ${language} HTTP:`,
+      response.status
+    );
+
+    return [];
+  }
+
+  const data = await response.json();
+
+  return Array.isArray(data?.pages)
+    ? data.pages
+    : [];
+}
+
 async function fetchWikipediaFromLanguage(language, query) {
   try {
-    const base =
-      `https://${language}.wikipedia.org`;
-
-    const url =
-      `${base}/w/rest.php/v1/search/page` +
-      `?q=${encodeURIComponent(query)}` +
-      `&limit=5`;
-
     console.log(
       `Wikipedia qidiruvi [${language}]:`,
       query
     );
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "User-Agent":
-          "QamirAI/1.0 (Qamir AI personal assistant)",
-        "Api-User-Agent":
-          "QamirAI/1.0 (Qamir AI personal assistant)"
-      }
-    });
-
-    if (!response.ok) {
-      console.error(
-        `Wikipedia ${language} HTTP:`,
-        response.status
+    let pages =
+      await wikipediaSearchRaw(
+        language,
+        query,
+        10
       );
-
-      return null;
-    }
-
-    const data =
-      await response.json();
-
-    const pages =
-      Array.isArray(data?.pages)
-        ? data.pages
-        : [];
 
     console.log(
       `Wikipedia ${language} natijalari:`,
@@ -871,25 +948,109 @@ async function fetchWikipediaFromLanguage(language, query) {
     );
 
     if (!pages.length) {
+      const queryWords = tokenizeRaw(query)
+        .filter(w => w.length >= 3);
+
+      for (const word of queryWords) {
+        try {
+          const fallbackPages =
+            await wikipediaSearchRaw(
+              language,
+              word,
+              10
+            );
+
+          pages.push(...fallbackPages);
+        } catch (e) {
+          console.error(
+            "Wikipedia fallback search error:",
+            e.message
+          );
+        }
+      }
+    }
+
+    if (!pages.length) {
       return null;
+    }
+
+    const uniquePages = [];
+    const seenTitles = new Set();
+
+    for (const item of pages) {
+      const titleKey = normalize(
+        item?.title ||
+        item?.key ||
+        ""
+      );
+
+      if (!titleKey || seenTitles.has(titleKey)) {
+        continue;
+      }
+
+      seenTitles.add(titleKey);
+      uniquePages.push(item);
     }
 
     const normalizedQuery =
       normalize(query);
 
     let page =
-      pages.find(p =>
+      uniquePages.find(item =>
         normalize(
-          p?.title ||
+          item?.title ||
+          item?.key ||
           ""
         ) === normalizedQuery
       );
 
     if (!page) {
-      page = pages[0];
+      let bestPage = null;
+      let bestScore = 0;
+
+      for (const candidate of uniquePages) {
+        const title = String(
+          candidate?.title ||
+          candidate?.key ||
+          ""
+        ).trim();
+
+        const score =
+          scoreWikipediaTitle(
+            query,
+            title
+          );
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestPage = candidate;
+        }
+      }
+
+      if (bestPage && bestScore >= 60) {
+        page = bestPage;
+      }
     }
 
     if (!page) {
+      const firstUsable = uniquePages.find(candidate => {
+        const title = String(
+          candidate?.title ||
+          candidate?.key ||
+          ""
+        ).trim();
+
+        return scoreWikipediaTitle(query, title) >= 45;
+      });
+
+      page = firstUsable || null;
+    }
+
+    if (!page) {
+      console.log(
+        `Wikipedia [${language}]: mos sahifa topilmadi`
+      );
+
       return null;
     }
 
@@ -916,10 +1077,7 @@ async function fetchWikipediaFromLanguage(language, query) {
       String(
         page.key ||
         title
-      ).replace(
-        / /g,
-        "_"
-      );
+      ).replace(/ /g, "_");
 
     const wikiUrl =
       `${base}/wiki/${encodeURIComponent(key)}`;
@@ -929,10 +1087,7 @@ async function fetchWikipediaFromLanguage(language, query) {
       title
     );
 
-    if (
-      !description &&
-      !excerpt
-    ) {
+    if (!description && !excerpt) {
       return null;
     }
 
@@ -955,11 +1110,7 @@ async function fetchWikipediaFromLanguage(language, query) {
 }
 
 async function searchWikipedia(userText) {
-  if (
-    !looksLikeWikipediaQuestion(
-      userText
-    )
-  ) {
+  if (!looksLikeWikipediaQuestion(userText)) {
     console.log(
       "Wikipedia: savol mos emas."
     );
@@ -968,14 +1119,9 @@ async function searchWikipedia(userText) {
   }
 
   const query =
-    cleanWikipediaQuery(
-      userText
-    );
+    cleanWikipediaQuery(userText);
 
-  if (
-    !query ||
-    query.length < 2
-  ) {
+  if (!query || query.length < 2) {
     console.log(
       "Wikipedia: query bo'sh."
     );
@@ -1062,7 +1208,7 @@ function normalizeMathQuestion(text) {
   return String(text || "")
     .trim()
     .toLowerCase()
-    .replace(/[ʻ’‘`´']/g, "")
+    .replace(/[ʻ’‘`´]/g, "")
     .replace(/[−–—]/g, "-")
     .replace(/[×✕]/g, "*")
     .replace(/÷/g, "/")
@@ -1071,10 +1217,14 @@ function normalizeMathQuestion(text) {
 }
 
 function calculatePercentage(text) {
-  const q = normalizeMathQuestion(text);
+  const q = normalizeMathQuestion(text)
+    .replace(/\?+$/g, "")
+    .trim();
 
-  let m = q.match(
-    /^(-?\d+(?:\.\d+)?)\s+ning\s+(-?\d+(?:\.\d+)?)\s*foiz(?:i|ini)?(?:\s+qancha)?$/
+  let m;
+
+  m = q.match(
+    /^(-?\d+(?:\.\d+)?)\s+ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s*(?:qancha|necha|bo'ladi|boladi)?$/i
   );
 
   if (m) {
@@ -1090,7 +1240,23 @@ function calculatePercentage(text) {
   }
 
   m = q.match(
-    /^(-?\d+(?:\.\d+)?)\s*foiz(?:i|ini)?\s+(-?\d+(?:\.\d+)?)$/
+    /^(?:hisobla|hisoblab\s+ber|top|aniqla)\s+(-?\d+(?:\.\d+)?)\s+ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)$/i
+  );
+
+  if (m) {
+    const base = Number(m[1]);
+    const percent = Number(m[2]);
+    const result = base * percent / 100;
+
+    return {
+      answer:
+        `${formatNumber(base)} ning ${formatNumber(percent)}% = ${formatNumber(result)}`,
+      result
+    };
+  }
+
+  m = q.match(
+    /^(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s+(?:ning\s+)?(-?\d+(?:\.\d+)?)(?:\s+dan)?$/i
   );
 
   if (m) {
@@ -1106,7 +1272,7 @@ function calculatePercentage(text) {
   }
 
   m = q.match(
-    /^(-?\d+(?:\.\d+)?)\s*%\s*(?:of|dan)\s*(-?\d+(?:\.\d+)?)$/
+    /^(-?\d+(?:\.\d+)?)\s*%\s*(?:of|dan|ning)\s*(-?\d+(?:\.\d+)?)$/i
   );
 
   if (m) {
@@ -1122,17 +1288,33 @@ function calculatePercentage(text) {
   }
 
   m = q.match(
-    /(-?\d+(?:\.\d+)?)\s*%\s*(?:of|dan)\s*(-?\d+(?:\.\d+)?)/
+    /^(-?\d+(?:\.\d+)?)\s+dan\s+(-?\d+(?:\.\d+)?)\s*%\s*(?:ayir|ayirish|kamaytir|kamaytirish)$/i
   );
 
   if (m) {
-    const percent = Number(m[1]);
-    const base = Number(m[2]);
-    const result = base * percent / 100;
+    const base = Number(m[1]);
+    const percent = Number(m[2]);
+    const result = base - (base * percent / 100);
 
     return {
       answer:
-        `${formatNumber(percent)}% of ${formatNumber(base)} = ${formatNumber(result)}`,
+        `${formatNumber(base)} dan ${formatNumber(percent)}% ayirilsa = ${formatNumber(result)}`,
+      result
+    };
+  }
+
+  m = q.match(
+    /^(-?\d+(?:\.\d+)?)\s+ga\s+(-?\d+(?:\.\d+)?)\s*%\s*(?:qo'sh|qosh|qo'shish|qoshish|oshir|oshirish)$/i
+  );
+
+  if (m) {
+    const base = Number(m[1]);
+    const percent = Number(m[2]);
+    const result = base + (base * percent / 100);
+
+    return {
+      answer:
+        `${formatNumber(base)} ga ${formatNumber(percent)}% qo‘shilsa = ${formatNumber(result)}`,
       result
     };
   }
@@ -1145,7 +1327,6 @@ function calculatePercentage(text) {
     const base = Number(m[1]);
     const op = m[2];
     const percent = Number(m[3]);
-
     const delta = base * percent / 100;
 
     const result =
@@ -1238,7 +1419,9 @@ function tokenizeMathExpression(expression) {
       ch === "%" ||
       ch === "^" ||
       ch === "(" ||
-      ch === ")"
+      ch === ")" ||
+      ch === "," ||
+      ch === "!"
     ) {
       tokens.push({
         type: ch,
@@ -1285,10 +1468,11 @@ function evaluateAdvancedExpression(expression) {
 
     ln: x => Math.log(x),
     log: x => Math.log10(x),
-
     exp: x => Math.exp(x),
 
     pow: (a, b) => Math.pow(a, b),
+    min: (...args) => Math.min(...args),
+    max: (...args) => Math.max(...args),
 
     fact: factorial
   };
@@ -1316,11 +1500,8 @@ function evaluateAdvancedExpression(expression) {
         tokens[pos].type === "-"
       )
     ) {
-      const op =
-        tokens[pos++].type;
-
-      const right =
-        parseTerm();
+      const op = tokens[pos++].type;
+      const right = parseTerm();
 
       value =
         op === "+"
@@ -1334,8 +1515,7 @@ function evaluateAdvancedExpression(expression) {
   }
 
   function parseTerm() {
-    let value =
-      parsePower();
+    let value = parsePower();
 
     while (
       pos < tokens.length &&
@@ -1345,16 +1525,10 @@ function evaluateAdvancedExpression(expression) {
         tokens[pos].type === "%"
       )
     ) {
-      const op =
-        tokens[pos++].type;
+      const op = tokens[pos++].type;
+      const right = parsePower();
 
-      const right =
-        parsePower();
-
-      if (
-        op === "/" ||
-        op === "%"
-      ) {
+      if (op === "/" || op === "%") {
         if (right === 0) {
           throw new Error(
             "0 ga bo‘lish mumkin emas"
@@ -1377,24 +1551,16 @@ function evaluateAdvancedExpression(expression) {
   }
 
   function parsePower() {
-    let value =
-      parseUnary();
+    let value = parseUnary();
 
     if (
       pos < tokens.length &&
       tokens[pos].type === "^"
     ) {
       pos++;
+      const right = parsePower();
 
-      const right =
-        parsePower();
-
-      value =
-        Math.pow(
-          value,
-          right
-        );
-
+      value = Math.pow(value, right);
       ensureFinite(value);
     }
 
@@ -1415,19 +1581,39 @@ function evaluateAdvancedExpression(expression) {
       tokens[pos].type === "-"
     ) {
       pos++;
-
-      const value =
-        -parseUnary();
-
-      return ensureFinite(value);
+      return ensureFinite(-parseUnary());
     }
 
     return parsePostfix();
   }
 
   function parsePostfix() {
-    let value =
-      parsePrimary();
+    let value = parsePrimary();
+
+    while (pos < tokens.length) {
+      if (tokens[pos].type === "!") {
+        pos++;
+        value = factorial(value);
+        continue;
+      }
+
+      if (tokens[pos].type === "%") {
+        const next = tokens[pos + 1];
+
+        if (
+          !next ||
+          next.type === ")" ||
+          next.type === "+" ||
+          next.type === "-"
+        ) {
+          pos++;
+          value /= 100;
+          continue;
+        }
+      }
+
+      break;
+    }
 
     return ensureFinite(value);
   }
@@ -1469,19 +1655,14 @@ function evaluateAdvancedExpression(expression) {
           pos < tokens.length &&
           tokens[pos].type !== ")"
         ) {
-          args.push(
-            parseExpression()
-          );
+          args.push(parseExpression());
 
           while (
             pos < tokens.length &&
             tokens[pos].type === ","
           ) {
             pos++;
-
-            args.push(
-              parseExpression()
-            );
+            args.push(parseExpression());
           }
         }
 
@@ -1512,17 +1693,25 @@ function evaluateAdvancedExpression(expression) {
 
         let result;
 
-        if (
-          name === "pow"
-        ) {
+        if (name === "pow") {
           if (args.length !== 2) {
             throw new Error(
               "pow(a,b) ikkita qiymat oladi"
             );
           }
 
-          result =
-            fn(args[0], args[1]);
+          result = fn(args[0], args[1]);
+        } else if (
+          name === "min" ||
+          name === "max"
+        ) {
+          if (!args.length) {
+            throw new Error(
+              `${name}() kamida bitta qiymat oladi`
+            );
+          }
+
+          result = fn(...args);
         } else {
           if (args.length !== 1) {
             throw new Error(
@@ -1530,13 +1719,10 @@ function evaluateAdvancedExpression(expression) {
             );
           }
 
-          result =
-            fn(args[0]);
+          result = fn(args[0]);
         }
 
-        return ensureFinite(
-          result
-        );
+        return ensureFinite(result);
       }
 
       if (
@@ -2201,6 +2387,34 @@ function definitePolynomialIntegral(text) {
   }
 }
 
+function prepareMathExpression(expression) {
+  let expr =
+    String(expression || "")
+      .trim()
+      .replace(/π/g, "pi")
+      .replace(
+        /√\s*([0-9.]+)/g,
+        "sqrt($1)"
+      );
+
+  // Oxiridagi foizni oddiy foiz qiymatiga aylantiramiz.
+  // 12% -> 0.12
+  // 5%2 esa modulo sifatida qoladi.
+  expr =
+    expr.replace(
+      /(\d+(?:\.\d+)?)%(?=\s*(?:$|[+\-*/^)]))/g,
+      "($1/100)"
+    );
+
+  expr =
+    expr.replace(
+      /(\d+(?:\.\d+)?)%(?=\s*\))/g,
+      "($1/100)"
+    );
+
+  return expr;
+}
+
 function tryCalculate(text) {
   const original =
     String(text || "").trim();
@@ -2209,6 +2423,7 @@ function tryCalculate(text) {
     return null;
   }
 
+  // 1. Oson foiz savollari.
   const percentage =
     calculatePercentage(
       original
@@ -2224,6 +2439,7 @@ function tryCalculate(text) {
     };
   }
 
+  // 2. Tenglamalar.
   const quadratic =
     solveQuadratic(
       original
@@ -2238,6 +2454,7 @@ function tryCalculate(text) {
     };
   }
 
+  // 3. Hosila.
   const derivative =
     derivativePolynomial(
       original
@@ -2252,6 +2469,7 @@ function tryCalculate(text) {
     };
   }
 
+  // 4. Aniq integral.
   const integral =
     definitePolynomialIntegral(
       original
@@ -2275,11 +2493,7 @@ function tryCalculate(text) {
         ""
       )
       .replace(
-        /^qancha\s+boladi\s*/i,
-        ""
-      )
-      .replace(
-        /^natijasi\s*/i,
+        /^(necha|qancha|natijasi)\s+boladi\s*/i,
         ""
       )
       .replace(
@@ -2289,9 +2503,8 @@ function tryCalculate(text) {
       .trim();
 
   expression =
-    expression.replace(
-      /√\s*([0-9.]+)/g,
-      "sqrt($1)"
+    prepareMathExpression(
+      expression
     );
 
   const containsNumber =
@@ -2305,9 +2518,9 @@ function tryCalculate(text) {
     );
 
   const containsMathFunction =
-    /\b(sqrt|sin|cos|tan|asin|acos|atan|log|ln|exp|abs|floor|ceil|round|fact|pow)\b/i
+    /\b(sqrt|sin|cos|tan|asin|acos|atan|log|ln|exp|abs|floor|ceil|round|fact|pow|min|max)\b/i
       .test(expression) ||
-    /π|\bpi\b|\be\b/i.test(
+    /\bpi\b|\be\b/i.test(
       expression
     );
 
@@ -2341,7 +2554,12 @@ function tryCalculate(text) {
       answer:
         `Javob: ${formatNumber(result)}`
     };
-  } catch {
+  } catch (e) {
+    console.error(
+      "CALCULATOR ERROR:",
+      e.message
+    );
+
     return null;
   }
 }
@@ -3316,11 +3534,10 @@ app.post(
                 .trim();
 
             if (wikiText) {
+              // Foydalanuvchiga URL/manba ko'rsatilmaydi.
               answer =
                 `${wiki.title}\n\n` +
-                `${wikiText}\n\n` +
-                `Manba: Wikipedia (${wiki.language === "uz" ? "O‘zbekcha" : "English"})\n` +
-                `${wiki.url}`;
+                `${wikiText}`;
 
               source =
                 "wikipedia";
@@ -3639,8 +3856,6 @@ app.post(
 
 // ============================================================
 // STATIC FRONTEND
-// IMPORTANT:
-// Express 5 da app.get("*") ishlatilmaydi.
 // ============================================================
 
 app.use(
