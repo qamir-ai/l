@@ -313,6 +313,259 @@ async function getWeatherAnswer(text, userCity = "") {
 // ============================================================
 
 // ============================================================
+// VALYUTA KURSLARI - O'ZBEKISTON MARKAZIY BANKI
+// API KEY TALAB QILMAYDI
+// ============================================================
+
+const CBU_CURRENCY_URL =
+  "https://cbu.uz/uz/arkhiv-kursov-valyut/json/";
+
+const CURRENCY_ALIASES = {
+  USD: [
+    "usd", "dollar", "dollor", "dolar", "dollari",
+    "aqsh dollari", "amerikan dollari", "amerika dollari"
+  ],
+  EUR: [
+    "eur", "euro", "evro", "yevرو", "evroni", "evrosi"
+  ],
+  RUB: [
+    "rub", "rubl", "rublь", "rubl", "rossiya rubli", "rossiya rubli"
+  ],
+  GBP: [
+    "gbp", "funt", "funt sterling", "ingliz funti", "angliya funti"
+  ],
+  CNY: [
+    "cny", "yuan", "yuань", "xitoy yuani", "xitoy yuani"
+  ],
+  JPY: [
+    "jpy", "iyena", "iena", "yapon iyenasi", "yapon ienası"
+  ],
+  KZT: [
+    "kzt", "tenge", "qozog'iston tengesi", "qozogiston tengesi"
+  ],
+  TRY: [
+    "try", "lira", "turk lirasi", "turkiya lirasi"
+  ]
+};
+
+function normalizeCurrencyText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[ʻ’‘`´]/g, "'")
+    .replace(/[?!.(),;:]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeCurrencyQuestion(text) {
+  const q = normalizeCurrencyText(text);
+
+  if (!q) return false;
+
+  const keywords = [
+    "valyuta", "valyutalar", "kurs", "kursi", "kurslar",
+    "dollar", "dollor", "dolar", "evro", "euro", "rubl",
+    "rublь", "funt", "yuan", "iyena", "iena", "tenge", "lira",
+    "usd", "eur", "rub", "gbp", "cny", "jpy", "kzt", "try",
+    "sum", "so'm", "som", "so'mda", "somda"
+  ];
+
+  return keywords.some(keyword =>
+    q.includes(keyword)
+  );
+}
+
+function findCurrencyCode(text) {
+  const q = normalizeCurrencyText(text);
+
+  const entries = Object.entries(CURRENCY_ALIASES)
+    .sort((a, b) => {
+      const maxA = Math.max(...a[1].map(x => x.length));
+      const maxB = Math.max(...b[1].map(x => x.length));
+      return maxB - maxA;
+    });
+
+  for (const [code, aliases] of entries) {
+    for (const alias of aliases) {
+      if (q.includes(alias)) {
+        return code;
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractCurrencyAmount(text) {
+  const q = normalizeCurrencyText(text);
+
+  const patterns = [
+    /(?:^|\s)(\\d+(?:[.,]\\d+)?)\s*(?:ming|mingta)?\s*(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\s|$)/i,
+    /(?:\b)(\\d+(?:[.,]\\d+)?)(?:\s+)(?:ta\s+)?(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\b)/i,
+    /(?:\b)(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\s*)(\\d+(?:[.,]\\d+)?)(?:\b)/i
+  ];
+
+  for (const pattern of patterns) {
+    const m = q.match(pattern);
+    if (m) {
+      const amount = Number(String(m[1]).replace(",", "."));
+      if (Number.isFinite(amount) && amount > 0 && amount <= 1000000000) {
+        return amount;
+      }
+    }
+  }
+
+  return null;
+}
+
+function formatCurrencyNumber(value) {
+  return Number(value).toLocaleString("uz-UZ", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: true
+  });
+}
+
+async function getCbuCurrencies() {
+  const response = await fetch(CBU_CURRENCY_URL, {
+    method: "GET",
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "QamirAI/1.0"
+    },
+    signal: AbortSignal.timeout(12000)
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(
+      `CBU currency HTTP ${response.status}: ${body.slice(0, 300)}`
+    );
+  }
+
+  const data = await response.json().catch(() => null);
+
+  if (!Array.isArray(data) || !data.length) {
+    throw new Error(
+      "Markaziy bankdan valyuta kurslari kelmadi."
+    );
+  }
+
+  return data;
+}
+
+function getCurrencyRow(rows, code) {
+  return rows.find(
+    row =>
+      String(row?.Ccy || row?.ccy || "").toUpperCase() === code
+  ) || null;
+}
+
+function formatCurrencyRow(row) {
+  const code = String(row?.Ccy || "").toUpperCase();
+  const name = String(row?.CcyNm_UZ || row?.CcyNm_EN || code).trim();
+  const nominal = Number(row?.Nominal || 1);
+  const rate = Number(String(row?.Rate || "0").replace(",", "."));
+  const diff = Number(String(row?.Diff || "0").replace(",", "."));
+
+  return {
+    code,
+    name,
+    nominal: Number.isFinite(nominal) && nominal > 0 ? nominal : 1,
+    rate,
+    diff: Number.isFinite(diff) ? diff : 0,
+    date: String(row?.Date || "").trim()
+  };
+}
+
+async function getCurrencyAnswer(text) {
+  if (!looksLikeCurrencyQuestion(text)) {
+    return null;
+  }
+
+  const code = findCurrencyCode(text);
+  const amount = extractCurrencyAmount(text);
+  const rows = await getCbuCurrencies();
+
+  const commonCodes = ["USD", "EUR", "RUB", "GBP", "CNY", "JPY", "KZT", "TRY"];
+
+  if (code) {
+    const row = getCurrencyRow(rows, code);
+
+    if (!row) {
+      return {
+        answer:
+          `${code} bo‘yicha Markaziy bank kursi hozircha topilmadi.`,
+        source: "currency_error"
+      };
+    }
+
+    const c = formatCurrencyRow(row);
+    const lines = [
+      `💱 ${c.name} (${c.code})`,
+      `Kurs: ${c.nominal} ${c.code} = ${formatCurrencyNumber(c.rate)} so‘m`,
+      `O‘zgarish: ${c.diff >= 0 ? "+" : ""}${formatCurrencyNumber(c.diff)} so‘m`,
+      `Sana: ${c.date || "noma’lum"}`
+    ];
+
+    if (amount != null) {
+      const sumAmount = amount * (c.rate / c.nominal);
+      lines.push(`Hisob: ${formatCurrencyNumber(amount)} ${c.code} ≈ ${formatCurrencyNumber(sumAmount)} so‘m`);
+    }
+
+    lines.push("Manba: O‘zbekiston Respublikasi Markaziy banki");
+
+    return {
+      answer: lines.join("\n"),
+      source: "currency_cbu",
+      currency: c.code,
+      amount: amount ?? null,
+      sum: amount != null ? amount * (c.rate / c.nominal) : null,
+      date: c.date
+    };
+  }
+
+  const selected = [];
+
+  for (const item of commonCodes) {
+    const row = getCurrencyRow(rows, item);
+    if (row) selected.push(formatCurrencyRow(row));
+  }
+
+  if (!selected.length) {
+    return {
+      answer: "Markaziy bankdan valyuta kurslari topilmadi.",
+      source: "currency_error"
+    };
+  }
+
+  const date = selected.find(x => x.date)?.date || "";
+  const lines = [
+    `💱 O‘zbekiston Respublikasi Markaziy banki valyuta kurslari${date ? ` — ${date}` : ""}`,
+    ""
+  ];
+
+  for (const c of selected) {
+    lines.push(
+      `${c.code} — ${c.name}: ${c.nominal} ${c.code} = ${formatCurrencyNumber(c.rate)} so‘m (${c.diff >= 0 ? "+" : ""}${formatCurrencyNumber(c.diff)})`
+    );
+  }
+
+  lines.push("");
+  lines.push("Manba: O‘zbekiston Respublikasi Markaziy banki");
+
+  return {
+    answer: lines.join("\n"),
+    source: "currency_cbu",
+    date
+  };
+}
+
+// ============================================================
+// END VALYUTA KURSLARI
+// ============================================================
+
+// ============================================================
 // ADVANCED CALCULATOR
 // ============================================================
 function formatNumber(value){ if(Object.is(value,-0))value=0; if(Number.isInteger(value))return String(value); return Number(value.toFixed(12)).toLocaleString("uz-UZ",{maximumFractionDigits:12,useGrouping:false}); }
@@ -391,7 +644,7 @@ async function askGemini(userText,history,knowledge){const key=process.env.GEMIN
 // ============================================================
 // HEALTH / AUTH
 // ============================================================
-app.get('/api/health',async(req,res)=>{try{await db('SELECT 1');res.json({ok:true,database:'connected',gemini:Boolean(process.env.GEMINI_API_KEY),translator:true,weather:true,model:process.env.GEMINI_MODEL||'gemini-2.5-flash'});}catch(e){res.status(500).json({ok:false,database:'error',error:e.message});}});
+app.get('/api/health',async(req,res)=>{try{await db('SELECT 1');res.json({ok:true,database:'connected',gemini:Boolean(process.env.GEMINI_API_KEY),translator:true,weather:true,currency:true,model:process.env.GEMINI_MODEL||'gemini-2.5-flash'});}catch(e){res.status(500).json({ok:false,database:'error',error:e.message});}});
 async function register(req,res){try{const{username,email='',password}=req.body||{},un=String(username||'').trim();if(un.length<3||String(password||'').length<6)return res.status(400).json({error:"Login kamida 3, parol kamida 6 belgidan iborat bo'lsin"});const rows=await db(`INSERT INTO users (username,email,password_hash) VALUES ($1,$2,$3) RETURNING id,username,email,birth_date,city,avatar,is_admin,created_at,last_seen`,[un,String(email).trim(),hashPassword(password)]);res.status(201).json({success:true,user:safeUser(rows[0]),token:String(rows[0].id)});}catch(e){if(e.code==='23505')return res.status(409).json({error:'Bu login allaqachon mavjud'});console.error('REGISTER ERROR:',e);res.status(500).json({error:"Ro'yxatdan o'tishda server xatosi"});}}
 async function login(req,res){try{const{username,password}=req.body||{},rows=await db(`SELECT id,username,email,birth_date,city,avatar,is_admin,created_at,last_seen FROM users WHERE LOWER(username)=LOWER($1) AND password_hash=$2 LIMIT 1`,[String(username||'').trim(),hashPassword(password||'')]);if(!rows.length)return res.status(401).json({error:"Login yoki parol noto'g'ri"});await db(`UPDATE users SET last_seen=NOW() WHERE id=$1`,[rows[0].id]);res.json({success:true,user:safeUser(rows[0]),token:String(rows[0].id)});}catch(e){console.error('LOGIN ERROR:',e);res.status(500).json({error:'Kirishda server xatosi'});}}
 app.post('/api/auth/register',register);app.post('/api/register',register);app.post('/api/auth/login',login);app.post('/api/login',login);app.get('/api/me',requireUser,async(req,res)=>res.json({success:true,user:safeUser(req.user)}));
@@ -436,6 +689,52 @@ app.post('/api/chat',requireUser,async(req,res)=>{
       }
     }
 
+    // ========================================================
+    // 1. VALYUTA KURSLARI
+    // ========================================================
+
+    if (looksLikeCurrencyQuestion(text)) {
+      try {
+        const currency = await getCurrencyAnswer(text);
+
+        if (currency) {
+          const saved = await db(
+            `INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,
+            [req.user.id, currency.answer]
+          );
+
+          return res.json({
+            success: true,
+            answer: currency.answer,
+            source: currency.source,
+            matched_knowledge: [],
+            currency: {
+              code: currency.currency || null,
+              amount: currency.amount ?? null,
+              sum: currency.sum ?? null,
+              date: currency.date || null
+            },
+            message: saved[0]
+          });
+        }
+      } catch (e) {
+        console.error('CURRENCY ERROR:', e.message);
+
+        const saved = await db(
+          `INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,
+          [req.user.id, 'Valyuta kurslari xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring.']
+        );
+
+        return res.json({
+          success: true,
+          answer: saved[0].text,
+          source: 'currency_error',
+          matched_knowledge: [],
+          message: saved[0]
+        });
+      }
+    }
+
     const calc=tryCalculate(text);if(calc){const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,calc.answer]);return res.json({success:true,answer:calc.answer,source:'calculator',matched_knowledge:[],calculation:{expression:calc.expression,result:calc.result},message:saved[0]});}
     const translationRequest=findTranslationIntent(text);
     if(translationRequest){try{const translated=await tryTranslate(text);if(translated){const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,translated.translated]);return res.json({success:true,answer:translated.translated,source:'translator',matched_knowledge:[],translation:{source_text:translated.sourceText,target_language:translated.targetCode,detected_source_language:translated.detectedSource||null},message:saved[0]});}}catch(e){console.error('TRANSLATOR ERROR:',e.message);const fallback=e.message||'Tarjima xizmati hozircha javob bermadi.';const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,`Tarjima xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring.`]);return res.json({success:true,answer:saved[0].text,source:'translator_error',error:fallback,matched_knowledge:[],message:saved[0]});}}
@@ -457,6 +756,7 @@ app.post('/api/admin/improve/:id/approve',requireAdmin,async(req,res)=>{const ro
 app.post('/api/admin/improve/:id/reject',requireAdmin,async(req,res)=>{await db(`UPDATE suggestions SET status='rejected' WHERE id=$1`,[Number(req.params.id)]);res.json({success:true});});
 
 app.use(express.static(__dirname));
-initDb().then(()=>{app.listen(PORT,'0.0.0.0',()=>{console.log(`Qamir AI server running on port ${PORT}`);console.log('PostgreSQL: connected');console.log(`Gemini API key: ${process.env.GEMINI_API_KEY?'configured':'NOT configured'}`);console.log(`Gemini model: ${process.env.GEMINI_MODEL||'gemini-2.5-flash'}`);console.log('Advanced calculator: enabled');console.log('Translator: Google public + LibreTranslate fallback enabled');console.log('Translator API key: not required');console.log('Uzbekistan date/time: enabled');console.log('Wikipedia search: enabled');console.log('Weather: Open-Meteo enabled (API key not required)');console.log('Knowledge search: strict matching enabled');});}).catch(error=>{console.error('DATABASE INIT ERROR:',error);process.exit(1);});
+initDb().then(()=>{app.listen(PORT,'0.0.0.0',()=>{console.log(`Qamir AI server running on port ${PORT}`);console.log('PostgreSQL: connected');console.log(`Gemini API key: ${process.env.GEMINI_API_KEY?'configured':'NOT configured'}`);console.log(`Gemini model: ${process.env.GEMINI_MODEL||'gemini-2.5-flash'}`);console.log('Advanced calculator: enabled');console.log('Translator: Google public + LibreTranslate fallback enabled');console.log('Translator API key: not required');console.log('Uzbekistan date/time: enabled');console.log('Wikipedia search: enabled');console.log('Weather: Open-Meteo enabled (API key not required)');
+    console.log('Currency: CBU Uzbekistan official JSON enabled (API key not required)');console.log('Knowledge search: strict matching enabled');});}).catch(error=>{console.error('DATABASE INIT ERROR:',error);process.exit(1);});
 process.on('SIGTERM',async()=>{await pool.end();process.exit(0);});
 process.on('SIGINT',async()=>{await pool.end();process.exit(0);});
