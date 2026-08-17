@@ -26,6 +26,22 @@ async function initDb() {
   await db(`CREATE TABLE IF NOT EXISTS messages (id BIGSERIAL PRIMARY KEY, user_id BIGINT REFERENCES users(id) ON DELETE CASCADE, sender TEXT NOT NULL CHECK (sender IN ('user','assistant')), text TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW())`);
   await db(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY DEFAULT 1, agent_name TEXT DEFAULT 'Qamir', brand_name TEXT DEFAULT 'Qamir AI', role TEXT DEFAULT '', instruction TEXT DEFAULT '', must_rules TEXT DEFAULT '', never_rules TEXT DEFAULT '', customer_rules TEXT DEFAULT '', language TEXT DEFAULT 'O‘zbek', tone TEXT DEFAULT 'Samimiy', emoji TEXT DEFAULT 'some', answer_length TEXT DEFAULT 'O‘rtacha', greeting TEXT DEFAULT 'Salom! Men Qamir AI. Sizga qanday yordam beray?', ask_style TEXT DEFAULT '', model TEXT DEFAULT 'gemini-2.5-flash', temperature NUMERIC DEFAULT 0.7, max_tokens INTEGER DEFAULT 1024, updated_at TIMESTAMPTZ DEFAULT NOW())`);
   await db(`CREATE TABLE IF NOT EXISTS suggestions (id BIGSERIAL PRIMARY KEY, title TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await db(`CREATE TABLE IF NOT EXISTS unanswered_questions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    question TEXT NOT NULL,
+    normalized_question TEXT NOT NULL,
+    question_key TEXT NOT NULL DEFAULT '',
+    ask_count INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'pending',
+    first_seen TIMESTAMPTZ DEFAULT NOW(),
+    last_seen TIMESTAMPTZ DEFAULT NOW(),
+    approved_knowledge_id BIGINT REFERENCES knowledge(id) ON DELETE SET NULL,
+    rejected_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await db(`CREATE INDEX IF NOT EXISTS idx_unanswered_status_count ON unanswered_questions(status, ask_count DESC, last_seen DESC)`);
+  await db(`CREATE INDEX IF NOT EXISTS idx_unanswered_key ON unanswered_questions(question_key)`);
   if (!(await db(`SELECT id FROM settings WHERE id = 1`)).length) await db(`INSERT INTO settings (id) VALUES (1)`);
   const adminPassword = process.env.ADMIN_PASSWORD || "Al-qamir";
   const adminHash = hashPassword(adminPassword);
@@ -2264,15 +2280,371 @@ app.post('/api/chat',requireUser,async(req,res)=>{
         console.error('GEMINI ERROR:', e.message);
       }
     }
-    if(!answer){answer='Bu savol bo‘yicha Qamir AI bilim bazasida hozircha yetarli ma’lumot yo‘q.';source='no_knowledge';}
-    const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,answer]);res.json({success:true,answer,source,matched_knowledge:matches.slice(0,3).map(x=>({id:x.id,title:x.title,question:x.question,score:x.score})),message:saved[0]});
+    let unansweredQuestion = null;
+    if(!answer){
+      answer='Bu savol bo‘yicha Qamir AI bilim bazasida hozircha yetarli ma’lumot yo‘q.';
+      source='no_knowledge';
+      try {
+        unansweredQuestion = await recordUnansweredQuestion(req.user.id, text);
+      } catch (e) {
+        console.error('UNANSWERED QUESTION RECORD ERROR:', e);
+      }
+    }
+    const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,answer]);
+    res.json({success:true,answer,source,matched_knowledge:matches.slice(0,3).map(x=>({id:x.id,title:x.title,question:x.question,score:x.score})),unanswered_question: unansweredQuestion ? {id:unansweredQuestion.id,question:unansweredQuestion.question,ask_count:unansweredQuestion.ask_count,status:unansweredQuestion.status} : null,message:saved[0]});
   }catch(e){console.error('CHAT ERROR:',e);res.status(500).json({error:'Chat server xatosi'});}
 });
 
 // ============================================================
+// JAVOBSIZ SAVOLLAR — 7+8+9+10+11 YAGONA MODUL
+// ============================================================
+
+function normalizeUnansweredQuestion(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[ʻ’‘`´]/g, "'")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const UNANSWERED_GENERIC_WORDS = new Set([
+  "nima", "degani", "degan", "manosi", "ma’nosi", "manosida",
+  "tarif", "ta’rif", "tarifi", "izoh", "izohi",
+  "qanday", "qanaqa", "qaysi", "qayer", "qayerda", "qachon",
+  "menga", "manga", "ber", "ayt", "top", "mumkin", "kerak"
+]);
+
+function unansweredQuestionKey(text) {
+  const words = tokenize(text, { removeStop: true })
+    .filter(w => w.length >= 2)
+    .filter(w => !UNANSWERED_GENERIC_WORDS.has(w))
+    .sort();
+  return words.length ? words.join(" ") : normalizeUnansweredQuestion(text);
+}
+
+function unansweredSimilarity(a, b) {
+  const na = unansweredQuestionKey(a);
+  const nb = unansweredQuestionKey(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+
+  const A = new Set(na.split(/\s+/).filter(Boolean));
+  const B = new Set(nb.split(/\s+/).filter(Boolean));
+  const union = new Set([...A, ...B]);
+  let intersection = 0;
+  for (const w of A) if (B.has(w)) intersection++;
+  const jaccard = union.size ? intersection / union.size : 0;
+
+  const distance = levenshtein(na, nb);
+  const maxLen = Math.max(na.length, nb.length, 1);
+  const editSimilarity = Math.max(0, 1 - distance / maxLen);
+
+  return Math.max(jaccard, editSimilarity);
+}
+
+async function recordUnansweredQuestion(userId, question) {
+  const normalized = normalizeUnansweredQuestion(question);
+  const key = unansweredQuestionKey(question);
+  if (!normalized) return null;
+
+  const rows = await db(`
+    SELECT id, user_id, question, normalized_question, question_key,
+           ask_count, status, first_seen, last_seen, approved_knowledge_id
+    FROM unanswered_questions
+    ORDER BY last_seen DESC
+    LIMIT 250
+  `);
+
+  let best = null;
+  let bestScore = 0;
+  for (const row of rows) {
+    const score = unansweredSimilarity(question, row.question || row.normalized_question || "");
+    if (score > bestScore) {
+      bestScore = score;
+      best = row;
+    }
+  }
+
+  if (best && (bestScore >= 0.82 || best.question_key === key)) {
+    const updated = await db(`
+      UPDATE unanswered_questions
+      SET ask_count = ask_count + 1,
+          last_seen = NOW(),
+          updated_at = NOW(),
+          user_id = COALESCE($2, user_id),
+          status = CASE WHEN status = 'rejected' THEN 'pending' ELSE status END,
+          rejected_at = CASE WHEN status = 'rejected' THEN NULL ELSE rejected_at END
+      WHERE id = $1
+      RETURNING id, user_id, question, normalized_question, question_key,
+                ask_count, status, first_seen, last_seen, approved_knowledge_id
+    `, [best.id, userId || null]);
+    return { ...updated[0], similarity: bestScore };
+  }
+
+  const inserted = await db(`
+    INSERT INTO unanswered_questions
+      (user_id, question, normalized_question, question_key)
+    VALUES ($1, $2, $3, $4)
+    RETURNING id, user_id, question, normalized_question, question_key,
+              ask_count, status, first_seen, last_seen, approved_knowledge_id
+  `, [userId || null, String(question).trim(), normalized, key]);
+
+  return { ...inserted[0], similarity: 1 };
+}
+
+function buildXlsxCell(value) {
+  const text = String(value ?? "");
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;")
+    .replace(/\r?\n/g, "&#10;");
+  return `<c t="inlineStr"><is><t xml:space="preserve">${escaped}</t></is></c>`;
+}
+
+function crc32(buffer) {
+  let table = crc32._table;
+  if (!table) {
+    table = crc32._table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) {
+        c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      }
+      table[n] = c >>> 0;
+    }
+  }
+  let crc = 0xFFFFFFFF;
+  for (const byte of buffer) crc = table[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function makeZip(files) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const name = Buffer.from(file.name, "utf8");
+    const data = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data, "utf8");
+    const crc = crc32(data);
+    const local = Buffer.alloc(30 + name.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt16LE(0, 10);
+    local.writeUInt16LE(0, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    local.writeUInt16LE(0, 28);
+    name.copy(local, 30);
+    localParts.push(local, data);
+
+    const central = Buffer.alloc(46 + name.length);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt16LE(0, 12);
+    central.writeUInt16LE(0, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt16LE(0, 30);
+    central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34);
+    central.writeUInt16LE(0, 36);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    name.copy(central, 46);
+    centralParts.push(central);
+
+    offset += local.length + data.length;
+  }
+
+  const localBuffer = Buffer.concat(localParts);
+  const centralBuffer = Buffer.concat(centralParts);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralBuffer.length, 12);
+  end.writeUInt32LE(localBuffer.length, 16);
+  end.writeUInt16LE(0, 20);
+  return Buffer.concat([localBuffer, centralBuffer, end]);
+}
+
+function makeUnansweredXlsx(rows) {
+  const dataRows = [
+    ["ID", "Savol", "Takrorlanish", "Holat", "Birinchi marta", "Oxirgi marta", "Tasdiqlangan bilim ID"],
+    ...rows.map(row => [
+      row.id,
+      row.question,
+      row.ask_count,
+      row.status,
+      row.first_seen ? new Date(row.first_seen).toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" }) : "",
+      row.last_seen ? new Date(row.last_seen).toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" }) : "",
+      row.approved_knowledge_id || ""
+    ])
+  ];
+
+  const rowsXml = dataRows.map((row, index) =>
+    `<row r="${index + 1}">${row.map(buildXlsxCell).join("")}</row>`
+  ).join("");
+
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData>${rowsXml}</sheetData></worksheet>`;
+
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+    `<Default Extension="xml" ContentType="application/xml"/>` +
+    `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+    `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+    `</Types>`;
+
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+
+  const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Javobsiz savollar" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+
+  const workbookRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`;
+
+  return makeZip([
+    { name: "[Content_Types].xml", data: contentTypes },
+    { name: "_rels/.rels", data: rels },
+    { name: "xl/workbook.xml", data: workbook },
+    { name: "xl/_rels/workbook.xml.rels", data: workbookRels },
+    { name: "xl/worksheets/sheet1.xml", data: sheet }
+  ]);
+}
+
+async function getUnansweredRows(status = "pending", limit = 500) {
+  let where = "";
+  const params = [];
+  if (status && status !== "all") {
+    where = "WHERE status = $1";
+    params.push(status);
+  }
+  params.push(Math.min(5000, Math.max(1, Number(limit) || 500)));
+  return db(`
+    SELECT id, user_id, question, normalized_question, question_key,
+           ask_count, status, first_seen, last_seen, approved_knowledge_id,
+           rejected_at, updated_at
+    FROM unanswered_questions
+    ${where}
+    ORDER BY ask_count DESC, last_seen DESC
+    LIMIT $${params.length}
+  `, params);
+}
+
+// ============================================================
+// END JAVOBSIZ SAVOLLAR
+// ============================================================
+
+// ============================================================
 // ADMIN STATS / IMPROVEMENT
 // ============================================================
-app.get('/api/admin/stats',requireAdmin,async(req,res)=>{const[m,k,u]=await Promise.all([db(`SELECT COUNT(*)::int AS n FROM messages`),db(`SELECT COUNT(*)::int AS n FROM knowledge WHERE enabled=TRUE`),db(`SELECT COUNT(*)::int AS n FROM users`)]);res.json({success:true,messages:m[0].n,knowledge:k[0].n,users:u[0].n});});
+app.get('/api/admin/stats',requireAdmin,async(req,res)=>{const[m,k,u,un]=await Promise.all([db(`SELECT COUNT(*)::int AS n FROM messages`),db(`SELECT COUNT(*)::int AS n FROM knowledge WHERE enabled=TRUE`),db(`SELECT COUNT(*)::int AS n FROM users`),db(`SELECT COUNT(*)::int AS n FROM unanswered_questions WHERE status='pending'`)]);res.json({success:true,messages:m[0].n,knowledge:k[0].n,users:u[0].n,unanswered_questions:un[0].n});});
+// ============================================================
+// ADMIN — JAVOBSIZ SAVOLLAR
+// ============================================================
+app.get('/api/admin/unanswered',requireAdmin,async(req,res)=>{
+  try {
+    const status = String(req.query.status || 'pending').toLowerCase();
+    const limit = Number(req.query.limit || 500);
+    const rows = await getUnansweredRows(status, limit);
+    res.json({ success:true, status, total:rows.length, questions:rows });
+  } catch (e) {
+    console.error('ADMIN UNANSWERED GET ERROR:', e);
+    res.status(500).json({ error:'Javobsiz savollarni olishda xato' });
+  }
+});
+
+app.get('/api/admin/unanswered/stats',requireAdmin,async(req,res)=>{
+  try {
+    const rows = await db(`SELECT status, COUNT(*)::int AS questions, COALESCE(SUM(ask_count),0)::int AS total_asks FROM unanswered_questions GROUP BY status ORDER BY status`);
+    const top = await db(`SELECT id, question, ask_count, status, first_seen, last_seen FROM unanswered_questions ORDER BY ask_count DESC, last_seen DESC LIMIT 10`);
+    res.json({ success:true, stats:rows, top });
+  } catch (e) {
+    console.error('ADMIN UNANSWERED STATS ERROR:', e);
+    res.status(500).json({ error:'Javobsiz savollar statistikasida xato' });
+  }
+});
+
+app.get('/api/admin/unanswered.xlsx',requireAdmin,async(req,res)=>{
+  try {
+    const status = String(req.query.status || 'all').toLowerCase();
+    const rows = await getUnansweredRows(status, 5000);
+    const xlsx = makeUnansweredXlsx(rows);
+    const stamp = new Date().toISOString().slice(0,10);
+    res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition',`attachment; filename="qamir_javobsiz_savollar_${stamp}.xlsx"`);
+    res.end(xlsx);
+  } catch (e) {
+    console.error('UNANSWERED XLSX ERROR:', e);
+    res.status(500).json({ error:'Excel fayl yaratishda xato' });
+  }
+});
+
+app.post('/api/admin/unanswered/:id/approve',requireAdmin,async(req,res)=>{
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error:'Savol ID noto‘g‘ri' });
+    const rows = await db(`SELECT * FROM unanswered_questions WHERE id=$1 LIMIT 1`,[id]);
+    if (!rows.length) return res.status(404).json({ error:'Javobsiz savol topilmadi' });
+    const item = rows[0];
+    const title = String(req.body?.title || 'Admin tasdiqlagan savol').trim();
+    const answer = String(req.body?.answer || '').trim();
+    const question = String(req.body?.question || item.question || '').trim();
+    if (!answer) return res.status(400).json({ error:'Bilim bazasiga qo‘shishdan oldin javob matnini kiriting.' });
+    const raw = `Savol: ${question}\nJavob: ${answer}`;
+    const knowledge = await db(`INSERT INTO knowledge(title,question,answer,raw_text,type,enabled) VALUES($1,$2,$3,$4,'admin_approved',TRUE) RETURNING id,title,question,answer,raw_text,type,enabled,created_at,updated_at`,[title,question,answer,raw]);
+    const updated = await db(`UPDATE unanswered_questions SET status='approved', approved_knowledge_id=$2, updated_at=NOW() WHERE id=$1 RETURNING id,question,ask_count,status,approved_knowledge_id`,[id,knowledge[0].id]);
+    res.json({ success:true, unanswered_question:updated[0], knowledge:knowledge[0] });
+  } catch (e) {
+    console.error('UNANSWERED APPROVE ERROR:', e);
+    res.status(500).json({ error:'Savolni bilim bazasiga qo‘shishda xato' });
+  }
+});
+
+app.post('/api/admin/unanswered/:id/reject',requireAdmin,async(req,res)=>{
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ error:'Savol ID noto‘g‘ri' });
+    const rows = await db(`UPDATE unanswered_questions SET status='rejected', rejected_at=NOW(), updated_at=NOW() WHERE id=$1 RETURNING id,question,ask_count,status,rejected_at`,[id]);
+    if (!rows.length) return res.status(404).json({ error:'Javobsiz savol topilmadi' });
+    res.json({ success:true, unanswered_question:rows[0] });
+  } catch (e) {
+    console.error('UNANSWERED REJECT ERROR:', e);
+    res.status(500).json({ error:'Savolni rad etishda xato' });
+  }
+});
+
+app.delete('/api/admin/unanswered/:id',requireAdmin,async(req,res)=>{
+  try {
+    const id = Number(req.params.id);
+    const rows = await db(`DELETE FROM unanswered_questions WHERE id=$1 RETURNING id`,[id]);
+    if (!rows.length) return res.status(404).json({ error:'Javobsiz savol topilmadi' });
+    res.json({ success:true });
+  } catch (e) {
+    console.error('UNANSWERED DELETE ERROR:', e);
+    res.status(500).json({ error:'Savolni o‘chirishda xato' });
+  }
+});
+
 app.get('/api/admin/improve',requireAdmin,async(req,res)=>{const rows=await db(`SELECT id,title,text,status,created_at FROM suggestions WHERE status='pending' ORDER BY id DESC`);res.json({success:true,suggestions:rows});});
 app.post('/api/admin/improve/analyze',requireAdmin,async(req,res)=>{const rows=await db(`SELECT text FROM messages WHERE sender='user' ORDER BY id DESC LIMIT 500`),counts=new Map();for(const row of rows){for(const w of tokenize(row.text).filter(x=>x.length>=5))counts.set(w,(counts.get(w)||0)+1);}for(const[topic,count]of[...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10)){if(count<3)continue;const exists=await db(`SELECT id FROM knowledge WHERE LOWER(question||' '||title||' '||answer) LIKE '%'||LOWER($1)||'%' LIMIT 1`,[topic]);if(!exists.length)await db(`INSERT INTO suggestions(title,text) VALUES($1,$2)`,['Ko‘p so‘raladigan mavzu',`Mijozlar “${topic}” mavzusini ${count} marta tilga oldi. Shu mavzu bo‘yicha aniq bilim qo‘shish foydali.`]);}res.json({success:true});});
 app.post('/api/admin/improve/:id/approve',requireAdmin,async(req,res)=>{const rows=await db(`SELECT id,title,text FROM suggestions WHERE id=$1 AND status='pending'`,[Number(req.params.id)]);if(!rows.length)return res.status(404).json({error:'Taklif topilmadi'});const s=rows[0];await db(`INSERT INTO knowledge(title,question,answer,raw_text,type) VALUES($1,'',$2,$2,'general')`,[s.title,s.text]);await db(`UPDATE suggestions SET status='approved' WHERE id=$1`,[s.id]);res.json({success:true});});
@@ -2280,6 +2652,6 @@ app.post('/api/admin/improve/:id/reject',requireAdmin,async(req,res)=>{await db(
 
 app.use(express.static(__dirname));
 initDb().then(()=>{app.listen(PORT,'0.0.0.0',()=>{console.log(`Qamir AI server running on port ${PORT}`);console.log('PostgreSQL: connected');console.log(`Gemini API key: ${process.env.GEMINI_API_KEY?'configured':'NOT configured'}`);console.log(`Gemini model: ${process.env.GEMINI_MODEL||'gemini-2.5-flash'}`);console.log('Advanced calculator: enabled');console.log('Translator: Google public + LibreTranslate fallback enabled');console.log('Translator API key: not required');console.log('Uzbekistan date/time: enabled');console.log('Wikipedia search: enabled');console.log('Weather: Open-Meteo enabled (API key not required)');
-    console.log('Currency: CBU Uzbekistan official JSON enabled (API key not required)');console.log('LexUZ: official legal search enabled (public pages)');console.log('Wikipedia: Uzbek + English + Russian fallback enabled');console.log('Dictionary: Wiktionary + Free Dictionary API enabled (API key not required)');console.log('Smart search: DuckDuckGo Instant + HTML fallback enabled (API key not required)');console.log('Knowledge search: strict matching enabled');});}).catch(error=>{console.error('DATABASE INIT ERROR:',error);process.exit(1);});
+    console.log('Currency: CBU Uzbekistan official JSON enabled (API key not required)');console.log('LexUZ: official legal search enabled (public pages)');console.log('Wikipedia: Uzbek + English + Russian fallback enabled');console.log('Dictionary: Wiktionary + Free Dictionary API enabled (API key not required)');console.log('Smart search: DuckDuckGo Instant + HTML fallback enabled (API key not required)');console.log('Unanswered questions: auto collect + dedupe + admin stats + XLSX + approve/reject enabled');console.log('Knowledge search: strict matching enabled');});}).catch(error=>{console.error('DATABASE INIT ERROR:',error);process.exit(1);});
 process.on('SIGTERM',async()=>{await pool.end();process.exit(0);});
 process.on('SIGINT',async()=>{await pool.end();process.exit(0);});
