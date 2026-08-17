@@ -400,9 +400,9 @@ function extractCurrencyAmount(text) {
   const q = normalizeCurrencyText(text);
 
   const patterns = [
-    /(?:^|\s)(\\d+(?:[.,]\\d+)?)\s*(?:ming|mingta)?\s*(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\s|$)/i,
-    /(?:\b)(\\d+(?:[.,]\\d+)?)(?:\s+)(?:ta\s+)?(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\b)/i,
-    /(?:\b)(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\s*)(\\d+(?:[.,]\\d+)?)(?:\b)/i
+    /(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:ming|mingta)?\s*(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\s|$)/i,
+    /(?:\b)(\d+(?:[.,]\d+)?)(?:\s+)(?:ta\s+)?(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\b)/i,
+    /(?:\b)(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\s*)(\d+(?:[.,]\d+)?)(?:\b)/i
   ];
 
   for (const pattern of patterns) {
