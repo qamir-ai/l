@@ -2563,13 +2563,95 @@ app.get('/api/admin/stats',requireAdmin,async(req,res)=>{const[m,k,u,un]=await P
 // ============================================================
 app.get('/api/admin/unanswered',requireAdmin,async(req,res)=>{
   try {
-    const status = String(req.query.status || 'pending').toLowerCase();
+    // Frontend filter/sort-ni o‘zi boshqaradi, shuning uchun default holatda
+    // barcha holatlarni qaytaramiz. Query bilan alohida status so‘rash ham mumkin.
+    const status = String(req.query.status || 'all').toLowerCase();
     const limit = Number(req.query.limit || 500);
     const rows = await getUnansweredRows(status, limit);
-    res.json({ success:true, status, total:rows.length, questions:rows });
+    const summary = await db(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status='pending')::int AS pending,
+        COUNT(*) FILTER (WHERE status='approved')::int AS approved,
+        COUNT(*) FILTER (WHERE status='rejected')::int AS rejected,
+        COUNT(*) FILTER (WHERE ask_count > 1)::int AS repeated
+      FROM unanswered_questions
+    `);
+    res.json({
+      success:true,
+      status,
+      total:rows.length,
+      questions:rows,
+      summary:summary[0] || {total:0,pending:0,approved:0,rejected:0,repeated:0}
+    });
   } catch (e) {
     console.error('ADMIN UNANSWERED GET ERROR:', e);
     res.status(500).json({ error:'Javobsiz savollarni olishda xato' });
+  }
+});
+
+app.post('/api/admin/unanswered/analyze',requireAdmin,async(req,res)=>{
+  try {
+    // Auto-collection / dedupe real vaqtda /chat ichida ishlaydi.
+    // Bu tugma esa mavjud user xabarlaridan javobsiz deb qolgan savollarni
+    // qayta ko‘rib chiqib, bilim bazasida mos javob topilmaganlarini yig‘adi.
+    const rows = await db(`
+      SELECT m.id, m.user_id, m.text, m.created_at
+      FROM messages m
+      WHERE m.sender='user'
+      ORDER BY m.created_at DESC
+      LIMIT 500
+    `);
+
+    let added = 0;
+    let repeated = 0;
+
+    for (const row of rows) {
+      const question = String(row.text || '').trim();
+      if (!question) continue;
+
+      // Maxsus xizmatlar / hisob-kitob / tarjima / bilim topilgan savollarni
+      // qayta javobsiz sifatida yozmaymiz.
+      const matches = await findKnowledge(question, 3);
+      const trusted = chooseKnowledgeAnswer(matches);
+      if (trusted) continue;
+
+      if (looksLikeWeatherQuestion(question) ||
+          looksLikeCurrencyQuestion(question) ||
+          findTranslationIntent(question) ||
+          tryCalculate(question) ||
+          looksLikeSmartSearchQuestion(question)) {
+        continue;
+      }
+
+      const existingBefore = await db(`
+        SELECT id, ask_count
+        FROM unanswered_questions
+        ORDER BY last_seen DESC
+        LIMIT 250
+      `);
+
+      const beforeIds = new Set(existingBefore.map(x => String(x.id)));
+      const result = await recordUnansweredQuestion(row.user_id, question);
+
+      if (result && beforeIds.has(String(result.id))) repeated++;
+      else if (result) added++;
+    }
+
+    const stats = await db(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status='pending')::int AS pending,
+        COUNT(*) FILTER (WHERE status='approved')::int AS approved,
+        COUNT(*) FILTER (WHERE status='rejected')::int AS rejected,
+        COUNT(*) FILTER (WHERE ask_count > 1)::int AS repeated
+      FROM unanswered_questions
+    `);
+
+    res.json({ success:true, added, repeated, summary:stats[0] || {} });
+  } catch (e) {
+    console.error('ADMIN UNANSWERED ANALYZE ERROR:', e);
+    res.status(500).json({ error:'Javobsiz savollarni tahlil qilishda xato' });
   }
 });
 
@@ -2577,7 +2659,16 @@ app.get('/api/admin/unanswered/stats',requireAdmin,async(req,res)=>{
   try {
     const rows = await db(`SELECT status, COUNT(*)::int AS questions, COALESCE(SUM(ask_count),0)::int AS total_asks FROM unanswered_questions GROUP BY status ORDER BY status`);
     const top = await db(`SELECT id, question, ask_count, status, first_seen, last_seen FROM unanswered_questions ORDER BY ask_count DESC, last_seen DESC LIMIT 10`);
-    res.json({ success:true, stats:rows, top });
+    const summary = await db(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status='pending')::int AS pending,
+        COUNT(*) FILTER (WHERE status='approved')::int AS approved,
+        COUNT(*) FILTER (WHERE status='rejected')::int AS rejected,
+        COUNT(*) FILTER (WHERE ask_count > 1)::int AS repeated
+      FROM unanswered_questions
+    `);
+    res.json({ success:true, stats:rows, top, summary:summary[0] || {} });
   } catch (e) {
     console.error('ADMIN UNANSWERED STATS ERROR:', e);
     res.status(500).json({ error:'Javobsiz savollar statistikasida xato' });
