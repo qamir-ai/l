@@ -945,7 +945,10 @@ function lexUzHtmlToText(html) {
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&#039;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&ndash;/gi, "–")
+    .replace(/&mdash;/gi, "—")
+    .replace(/&#39;|&#039;|&#x27;/gi, "'")
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
@@ -1150,7 +1153,7 @@ async function searchLexUz(userText) {
 const DICTIONARY_API_BASE = "https://api.dictionaryapi.dev/api/v2/entries";
 
 function normalizeDictionaryText(text) {
-  return String(text || "")
+  return decodeHtmlEntities(String(text || ""))
     .toLowerCase()
     .replace(/[ʻ’‘`´]/g, "'")
     .replace(/\s+/g, " ")
@@ -1163,31 +1166,50 @@ function looksLikeDictionaryQuestion(text) {
 
   return [
     /\bnima\s+degani\b/i,
-    /\bma['’]?nosi\b/i,
-    /\bma['’]?nosi\s+nima\b/i,
-    /\bmanosi\b/i,
-    /\bta['’]?rif\b/i,
-    /\bta['’]?rifi\b/i,
-    /\bizohi\b/i,
-    /\blug['’]?at\b/i,
-    /\blugat\b/i,
-    /\bdefinition\b/i,
-    /\bmeaning\s+of\b/i,
-    /\bwhat\s+does\b/i,
+    /\bma['’]?nosi(?:\s+nima)?\b/i,
+    /\bmanosi(?:\s+nima)?\b/i,
+    /\bso['’]?z(?:ining|ning|i)?\s+ma['’]?nosi(?:\s+nima)?\b/i,
+    /\bsoz(?:ining|ning|i)?\s+manosi(?:\s+nima)?\b/i,
+    /\bso['’]?zi(?:\s+nima(?:\s+degani)?)?\b/i,
+    /\bsoz(?:i(?:\s+nima(?:\s+degani)?)?)?\b/i,
+    /\bta['’]?rif(?:i)?\b/i,
+    /\bta'rif\s+ber\b/i,
+    /\bizohi(?:\s+nima)?\b/i,
+    /\blug['’]?at(?:dan)?\b/i,
+    /\blugat(?:dan)?\b/i,
+    /\blug['’]?at\s+.*\b(?:top|qidir|izla)\b/i,
+    /\b(?:definition|meaning|meaning\s+of)\b/i,
+    /\bwhat\s+(?:does|is)\b/i,
     /\bчто\s+значит\b/i,
     /\bзначение\b/i,
-    /\bчто\s+такое\b/i,
-    /\bso['’]?zning\s+ma['’]?nosi\b/i,
-    /\bsozning\s+manosi\b/i
+    /\bчто\s+такое\b/i
   ].some(pattern => pattern.test(q));
 }
 
 function cleanDictionaryQuery(text) {
-  let q = normalizeDictionaryText(text)
+  let q = decodeHtmlEntities(String(text || ""))
+    .trim()
+    .replace(/[ʻ’‘`´]/g, "'")
     .replace(/[“”«»]/g, '"')
     .replace(/[?!.]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
+
+  // Buyruq shakli: lug‘atdan "algoritm" so‘zini top.
+  let m = q.match(/^(?:lug['’]?atdan|lugatdan)\s+["']?(.+?)["']?\s+so['’]?z(?:ini|ni|i)?\s+(?:top|qidir|izla|topib\s+ber|qidirib\s+ber)\s*$/iu);
+  if (m) return m[1].trim().replace(/^["']|["']$/g, "").slice(0, 160);
+
+  m = q.match(/^["']?(.+?)["']?\s+so['’]?z(?:ining|ning)\s+ma['’]?nosi(?:\s+nima)?\s*$/iu);
+  if (m) return m[1].trim().replace(/^["']|["']$/g, "").slice(0, 160);
+
+  m = q.match(/^["']?(.+?)["']?\s+soz(?:ining|ning)\s+manosi(?:\s+nima)?\s*$/iu);
+  if (m) return m[1].trim().replace(/^["']|["']$/g, "").slice(0, 160);
+
+  m = q.match(/^(.+?)ga\s+ta['’]?rif\s+ber\s*$/iu);
+  if (m) return m[1].trim().replace(/["']/g, "").trim().slice(0, 160);
+
+  m = q.match(/^(.+?)\s+ta['’]?rif\s+ber\s*$/iu);
+  if (m) return m[1].trim().replace(/^["']|["']$/g, "").trim().slice(0, 160);
 
   q = q
     .replace(/^\s*(?:lug['’]?atdan|lugatdan|lug['’]?at|lugat)\s*[:,-]?\s*/iu, "")
@@ -1203,7 +1225,6 @@ function cleanDictionaryQuery(text) {
     .replace(/^(?:что\s+значит|что\s+такое|значение)\s+/iu, "")
     .trim();
 
-  // "kompyuter so‘zining ma’nosi nima" -> "kompyuter"
   const marker = q.match(/\s+(?:so['’]?z(?:ining|ning|ini|ni|i)?|soz(?:ining|ning|ini|ni|i)?|ma['’]?nosi|manosi|nima\s+degani|nima\s+degan|ta['’]?rifi|tarifi|izohi|definition)\b[\s\S]*$/iu);
   if (marker && marker.index > 0) q = q.slice(0, marker.index).trim();
 
@@ -1298,42 +1319,88 @@ function extractWiktionaryText(html) {
 
 async function wiktionaryLookup(language, word) {
   const base = `https://${language}.wiktionary.org/w/api.php`;
-  const params = new URLSearchParams({
+
+  async function request(paramsObject) {
+    const params = new URLSearchParams({
+      format: "json",
+      formatversion: "2",
+      origin: "*",
+      ...paramsObject
+    });
+
+    const response = await fetch(`${base}?${params.toString()}`, {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "QamirAI/1.0 (Qamir AI personal assistant)"
+      },
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Wiktionary ${language} HTTP ${response.status}`);
+    }
+
+    return response.json().catch(() => ({}));
+  }
+
+  let data = await request({
     action: "query",
     prop: "extracts",
     explaintext: "1",
     exintro: "1",
     redirects: "1",
-    titles: word,
-    format: "json",
-    formatversion: "2",
-    origin: "*"
+    titles: word
   });
 
-  const response = await fetch(`${base}?${params.toString()}`, {
-    method: "GET",
-    headers: {
-      "Accept": "application/json",
-      "User-Agent": "QamirAI/1.0 (Qamir AI personal assistant)"
-    },
-    signal: AbortSignal.timeout(10000)
-  });
+  let page = Array.isArray(data?.query?.pages) ? data.query.pages[0] : null;
 
-  if (!response.ok) {
-    throw new Error(`Wiktionary ${language} HTTP ${response.status}`);
+  if (page && !page.missing) {
+    const extract = extractWiktionaryText(page.extract || "");
+    if (extract) {
+      return { title: String(page.title || word).trim(), extract };
+    }
   }
 
-  const data = await response.json().catch(() => ({}));
-  const page = Array.isArray(data?.query?.pages) ? data.query.pages[0] : null;
-  if (!page || page.missing) return null;
+  // Exact sahifa bo‘lmasa, Wiktionary ichki qidiruvidan eng yaqin yozuvni topamiz.
+  const searchData = await request({
+    action: "query",
+    list: "search",
+    srnamespace: "0",
+    srsearch: word,
+    srlimit: "5"
+  });
 
-  const extract = extractWiktionaryText(page.extract || "");
-  if (!extract) return null;
+  const candidates = Array.isArray(searchData?.query?.search)
+    ? searchData.query.search
+    : [];
 
-  return {
-    title: String(page.title || word).trim(),
-    extract
-  };
+  for (const item of candidates) {
+    const title = String(item?.title || "").trim();
+    if (!title) continue;
+
+    const detailData = await request({
+      action: "query",
+      prop: "extracts",
+      explaintext: "1",
+      exintro: "1",
+      redirects: "1",
+      titles: title
+    });
+
+    const candidatePage = Array.isArray(detailData?.query?.pages)
+      ? detailData.query.pages[0]
+      : null;
+
+    if (!candidatePage || candidatePage.missing) continue;
+
+    const extract = extractWiktionaryText(candidatePage.extract || "");
+    if (extract) {
+      return { title: String(candidatePage.title || title).trim(), extract };
+    }
+  }
+
+  return null;
 }
 
 async function getDictionaryAnswer(text) {
@@ -1501,10 +1568,23 @@ function decodeHtmlEntities(text) {
   return String(text || "")
     .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&#039;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&nbsp;/gi, " ");
+    .replace(/&apos;/gi, "'")
+    .replace(/&#39;|&#039;|&#x27;/gi, "'")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&ndash;/gi, "–")
+    .replace(/&mdash;/gi, "—")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+      const code = Number.parseInt(hex, 16);
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : _;
+    })
+    .replace(/&#([0-9]+);/g, (_, dec) => {
+      const code = Number.parseInt(dec, 10);
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : _;
+    });
 }
 
 function stripHtml(text) {
