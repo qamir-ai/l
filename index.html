@@ -8,24 +8,33 @@
   <title>Qamir AI</title>
   <link rel="icon" href="assets/qamir-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* 7–11: Javobsiz savollar / takomillashtirish paneli */
+    .unanswered-tools{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+    .unanswered-tools button{cursor:pointer}
+    .unanswered-box{margin-top:14px;border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px;background:rgba(255,255,255,.025)}
+    .unanswered-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+    .unanswered-head h3{margin:0;font-size:15px}
+    .unanswered-list{display:grid;gap:10px}
+    .unanswered-item{border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px;background:rgba(255,255,255,.02)}
+    .unanswered-item .u-top{display:flex;gap:10px;align-items:flex-start}
+    .unanswered-item .u-rank{min-width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:rgba(255,255,255,.07);font-weight:700}
+    .unanswered-item .u-text{flex:1;line-height:1.45}
+    .unanswered-item .u-count{font-size:12px;opacity:.7;margin-top:5px}
+    .unanswered-item .u-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .unanswered-item textarea{width:100%;margin-top:10px;min-height:80px;resize:vertical}
+    .unanswered-empty{padding:18px;text-align:center;opacity:.7}
+    .unanswered-note{font-size:12px;opacity:.68;margin-top:8px;line-height:1.45}
+  </style>
 </head>
 <body>
   <div class="bg-orb orb-a"></div><div class="bg-orb orb-b"></div><div class="stars"></div>
-
   <div id="toast" class="toast"></div>
 
-  <!-- AUTH -->
   <section id="authView" class="auth-view">
-    <div class="auth-brand">
-      <img src="assets/qamir-mark.svg" alt="Qamir AI">
-      <div><div class="brand-title">Qamir <span>AI</span></div><div class="brand-sub">Intellektual yordamchi</div></div>
-    </div>
+    <div class="auth-brand"><img src="assets/qamir-mark.svg" alt="Qamir AI"><div><div class="brand-title">Qamir <span>AI</span></div><div class="brand-sub">Intellektual yordamchi</div></div></div>
     <div class="auth-card glass">
-      <div class="auth-head">
-        <div class="eyebrow">QAMIR AI</div>
-        <h1 id="authTitle">Xush kelibsiz</h1>
-        <p id="authHint">Hisobingizga kiring va suhbatni boshlang.</p>
-      </div>
+      <div class="auth-head"><div class="eyebrow">QAMIR AI</div><h1 id="authTitle">Xush kelibsiz</h1><p id="authHint">Hisobingizga kiring va suhbatni boshlang.</p></div>
       <form id="authForm">
         <label>Login<input id="authUsername" autocomplete="username" required placeholder="Login"></label>
         <label id="emailField" class="hidden">Email<input id="authEmail" type="email" autocomplete="email" placeholder="email@example.com"></label>
@@ -39,16 +48,11 @@
     </div>
   </section>
 
-  <!-- APP -->
   <div id="appView" class="app-shell hidden">
     <aside class="sidebar">
-      <div class="side-brand">
-        <img src="assets/qamir-mark.svg" alt="">
-        <div><b>Qamir <span>AI</span></b><small>Intellektual yordamchi</small></div>
-      </div>
+      <div class="side-brand"><img src="assets/qamir-mark.svg" alt=""><div><b>Qamir <span>AI</span></b><small>Intellektual yordamchi</small></div></div>
       <button id="newChat" class="new-chat"><span>＋</span> Yangi suhbat</button>
-      <div class="side-section-title">Suhbatlar</div>
-      <div id="chatList" class="chat-list"></div>
+      <div class="side-section-title">Suhbatlar</div><div id="chatList" class="chat-list"></div>
       <div class="side-bottom">
         <button id="profileBtn" class="side-btn">◉ <span>Profil</span></button>
         <button id="settingsBtn" class="side-btn admin-only">⚙ <span>Agent sozlamalari</span></button>
@@ -57,135 +61,121 @@
     </aside>
 
     <main class="chat-main">
-      <header class="topbar">
-        <button id="mobileMenu" class="icon-btn mobile-only">☰</button>
-        <div class="top-agent">
-          <div class="agent-avatar"><img src="assets/qamir-mark.svg" alt=""></div>
-          <div><strong>Qamir AI</strong><div><i class="online-dot"></i><span id="topStatus">Online</span></div></div>
-        </div>
-        <div class="top-user">
-          <button id="topProfile" class="user-chip"><span id="topAvatar" class="mini-avatar">◉</span><span id="topUsername">User</span></button>
-        </div>
-      </header>
-
+      <header class="topbar"><button id="mobileMenu" class="icon-btn mobile-only">☰</button><div class="top-agent"><div class="agent-avatar"><img src="assets/qamir-mark.svg" alt=""></div><div><strong>Qamir AI</strong><div><i class="online-dot"></i><span id="topStatus">Online</span></div></div></div><div class="top-user"><button id="topProfile" class="user-chip"><span id="topAvatar" class="mini-avatar">◉</span><span id="topUsername">User</span></button></div></header>
       <section id="chat" class="chat-area"></section>
-
-      <div class="composer-wrap">
-        <div class="composer">
-          <textarea id="msg" rows="1" maxlength="12000" placeholder="Qamir AI'ga savolingizni yozing..."></textarea>
-          <button id="send" class="send-btn" aria-label="Yuborish">➤</button>
-        </div>
-        <div class="composer-hint">Enter — yuborish · Shift + Enter — yangi qator</div>
-      </div>
+      <div class="composer-wrap"><div class="composer"><textarea id="msg" rows="1" maxlength="12000" placeholder="Qamir AI'ga savolingizni yozing..."></textarea><button id="send" class="send-btn" aria-label="Yuborish">➤</button></div><div class="composer-hint">Enter — yuborish · Shift + Enter — yangi qator</div></div>
     </main>
   </div>
 
-  <!-- PROFILE -->
   <div id="profileModal" class="modal hidden">
-    <div class="modal-card">
-      <button class="modal-close" data-close="profileModal">×</button>
-      <div class="modal-title"><span class="modal-icon">◉</span><div><h2>Profil</h2><p>Shaxsiy ma’lumotlaringiz</p></div></div>
-      <div class="profile-photo">
-        <img id="profileAvatar" src="assets/avatar.svg" alt="Profil">
-        <label class="upload-btn">Rasm tanlash<input id="avatarFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
-      </div>
-      <div class="form-grid">
-        <label>Login<input id="profileUsername" disabled></label>
-        <label>Email<input id="profileEmail" type="email"></label>
-        <label>Tug‘ilgan sana<input id="profileBirth" type="date"></label>
-        <label>Qayerda turasiz?<input id="profileCity" placeholder="Shahar"></label>
-      </div>
-      <div class="divider"></div>
-      <h3>Parolni almashtirish</h3>
-      <label>Yangi parol<input id="profileNewPassword" type="password" placeholder="O‘zgartirmasangiz bo‘sh qoldiring"></label>
-      <div id="profileError" class="form-error"></div>
-      <div class="modal-actions"><button class="secondary-btn" data-close="profileModal">Bekor qilish</button><button id="saveProfile" class="primary-btn">Saqlash</button></div>
-    </div>
+    <div class="modal-card"><button class="modal-close" data-close="profileModal">×</button><div class="modal-title"><span class="modal-icon">◉</span><div><h2>Profil</h2><p>Shaxsiy ma’lumotlaringiz</p></div></div><div class="profile-photo"><img id="profileAvatar" src="assets/avatar.svg" alt="Profil"><label class="upload-btn">Rasm tanlash<input id="avatarFile" type="file" accept="image/png,image/jpeg,image/webp"></label></div><div class="form-grid"><label>Login<input id="profileUsername" disabled></label><label>Email<input id="profileEmail" type="email"></label><label>Tug‘ilgan sana<input id="profileBirth" type="date"></label><label>Qayerda turasiz?<input id="profileCity" placeholder="Shahar"></label></div><div class="divider"></div><h3>Parolni almashtirish</h3><label>Yangi parol<input id="profileNewPassword" type="password" placeholder="O‘zgartirmasangiz bo‘sh qoldiring"></label><div id="profileError" class="form-error"></div><div class="modal-actions"><button class="secondary-btn" data-close="profileModal">Bekor qilish</button><button id="saveProfile" class="primary-btn">Saqlash</button></div></div>
   </div>
 
-  <!-- ADMIN SETTINGS -->
   <div id="settingsModal" class="modal hidden">
     <div class="modal-card settings-card">
       <button class="modal-close" data-close="settingsModal">×</button>
       <div class="modal-title"><span class="modal-icon">⚙</span><div><h2>Agent boshqaruvi</h2><p>Qamir AI'ning bilimlari, xulqi va javob uslubini boshqaring.</p></div></div>
-
       <div class="settings-tabs">
-        <button class="tab active" data-tab="identity">Shaxsiyat</button>
-        <button class="tab" data-tab="knowledge">Bilimlar</button>
-        <button class="tab" data-tab="rules">Qoidalar</button>
-        <button class="tab" data-tab="behavior">Javob uslubi</button>
-        <button class="tab" data-tab="improve">Takomillashtirish</button>
-        <button class="tab" data-tab="ai">AI / API</button>
+        <button class="tab active" data-tab="identity">Shaxsiyat</button><button class="tab" data-tab="knowledge">Bilimlar</button><button class="tab" data-tab="rules">Qoidalar</button><button class="tab" data-tab="behavior">Javob uslubi</button><button class="tab" data-tab="improve">Takomillashtirish</button><button class="tab" data-tab="ai">AI / API</button>
       </div>
 
       <div id="tab-identity" class="tab-panel active">
-        <div class="two-col">
-          <label>Agent nomi<input id="agentName" placeholder="Qamir"></label>
-          <label>Brend nomi<input id="brandName" placeholder="Qamir AI"></label>
-        </div>
+        <div class="two-col"><label>Agent nomi<input id="agentName" placeholder="Qamir"></label><label>Brend nomi<input id="brandName" placeholder="Qamir AI"></label></div>
         <label>Agentning asosiy roli<textarea id="agentRole" rows="3" placeholder="Agent kim va mijozga qanday yordam beradi?"></textarea></label>
         <label>Asosiy ko‘rsatma (System Instructions)<textarea id="agentInstruction" rows="8" placeholder="Agent uchun asosiy ko‘rsatmalar..."></textarea></label>
       </div>
 
       <div id="tab-knowledge" class="tab-panel">
         <div class="section-note">Mijozlarga kerak bo‘ladigan ma’lumotlarni shu yerga qo‘shing. Agent ularni javob tuzishda ishlatadi.</div>
-        <div class="knowledge-add">
-          <input id="knowledgeTitle" placeholder="Masalan: Narxlar">
-          <select id="knowledgeType"><option value="general">Umumiy</option><option value="service">Xizmat</option><option value="price">Narx</option><option value="faq">Savol-javob</option><option value="contact">Kontakt</option><option value="policy">Qoidalar</option></select>
-          <textarea id="knowledgeText" rows="4" placeholder="Bilim yoki ma’lumotni yozing..."></textarea>
-          <button id="addKnowledge" class="primary-btn">＋ Bilim qo‘shish</button>
-        </div>
+        <div class="knowledge-add"><input id="knowledgeTitle" placeholder="Masalan: Narxlar"><select id="knowledgeType"><option value="general">Umumiy</option><option value="service">Xizmat</option><option value="price">Narx</option><option value="faq">Savol-javob</option><option value="contact">Kontakt</option><option value="policy">Qoidalar</option></select><textarea id="knowledgeText" rows="4" placeholder="Bilim yoki ma’lumotni yozing..."></textarea><button id="addKnowledge" class="primary-btn">＋ Bilim qo‘shish</button></div>
         <div id="knowledgeList" class="knowledge-list"></div>
       </div>
 
-      <div id="tab-rules" class="tab-panel">
-        <div class="two-col">
-          <label>Qilishi shart bo‘lganlar<textarea id="mustRules" rows="7" placeholder="Masalan: Mijozga doimo o‘zbek tilida, hurmat bilan javob ber."></textarea></label>
-          <label>Qilmasligi kerak bo‘lganlar<textarea id="neverRules" rows="7" placeholder="Masalan: Bilmagan narxni o‘ylab topma."></textarea></label>
-        </div>
-        <label>Mijoz bilan muomala qoidalari<textarea id="customerRules" rows="6"></textarea></label>
-      </div>
-
-      <div id="tab-behavior" class="tab-panel">
-        <div class="two-col">
-          <label>Til<select id="agentLanguage"><option>O‘zbek</option><option>O‘zbek + Rus</option><option>O‘zbek + Ingliz</option><option>Avtomatik</option></select></label>
-          <label>Ohang<select id="agentTone"><option>Samimiy</option><option>Professional</option><option>Premium</option><option>Qisqa va aniq</option><option>Batafsil</option></select></label>
-          <label>Emoji<select id="emojiMode"><option value="some">Ba’zan</option><option value="no">Ishlatmasin</option><option value="many">Ko‘proq</option></select></label>
-          <label>Javob uzunligi<select id="answerLength"><option>Qisqa</option><option>O‘rtacha</option><option>Batafsil</option></select></label>
-        </div>
-        <label>Salomlashish / birinchi javob<textarea id="greeting" rows="4"></textarea></label>
-        <label>Mijozdan ma’lumot so‘rash uslubi<textarea id="askStyle" rows="4" placeholder="Masalan: Kerakli ma’lumotni muloyim savollar bilan aniqlashtir."></textarea></label>
-      </div>
+      <div id="tab-rules" class="tab-panel"><div class="two-col"><label>Qilishi shart bo‘lganlar<textarea id="mustRules" rows="7"></textarea></label><label>Qilmasligi kerak bo‘lganlar<textarea id="neverRules" rows="7"></textarea></label></div><label>Mijoz bilan muomala qoidalari<textarea id="customerRules" rows="6"></textarea></label></div>
+      <div id="tab-behavior" class="tab-panel"><div class="two-col"><label>Til<select id="agentLanguage"><option>O‘zbek</option><option>O‘zbek + Rus</option><option>O‘zbek + Ingliz</option><option>Avtomatik</option></select></label><label>Ohang<select id="agentTone"><option>Samimiy</option><option>Professional</option><option>Premium</option><option>Qisqa va aniq</option><option>Batafsil</option></select></label><label>Emoji<select id="emojiMode"><option value="some">Ba’zan</option><option value="no">Ishlatmasin</option><option value="many">Ko‘proq</option></select></label><label>Javob uzunligi<select id="answerLength"><option>Qisqa</option><option>O‘rtacha</option><option>Batafsil</option></select></label></div><label>Salomlashish / birinchi javob<textarea id="greeting" rows="4"></textarea></label><label>Mijozdan ma’lumot so‘rash uslubi<textarea id="askStyle" rows="4"></textarea></label></div>
 
       <div id="tab-improve" class="tab-panel">
-        <div class="section-note">Agent suhbatlardan o‘zi qoidani o‘zgartirmaydi. U takliflar yaratadi; siz tasdiqlagan takliflargina bilimga qo‘shiladi. Shu usul noto‘g‘ri “o‘rganish” xavfini kamaytiradi.</div>
-        <div class="improve-stats">
-          <div><b id="statMessages">0</b><span>Suhbat xabarlari</span></div>
-          <div><b id="statQuestions">0</b><span>Ko‘p uchragan mavzular</span></div>
-          <div><b id="statKnowledge">0</b><span>Bilimlar</span></div>
+        <div class="section-note">Bu bo‘lim Admin uchun. Qamir AI o‘zi qoidalarni o‘zgartirmaydi. Tahlil natijalari taklif sifatida chiqadi; Admin tasdiqlagandan keyingina bilim bazasiga qo‘shiladi.</div>
+        <div class="improve-stats"><div><b id="statMessages">0</b><span>Suhbat xabarlari</span></div><div><b id="statQuestions">0</b><span>Ko‘p uchragan mavzular</span></div><div><b id="statKnowledge">0</b><span>Bilimlar</span></div><div><b id="statUnanswered">0</b><span>Takliflar</span></div></div>
+        <div class="unanswered-tools">
+          <button id="analyzeAgent" class="primary-btn">✦ Suhbatlarni tahlil qilish</button>
+          <button id="refreshUnanswered" class="secondary-btn" type="button">↻ Yangilash</button>
+          <button id="exportUnanswered" class="secondary-btn" type="button">📥 Excel (.xlsx)</button>
         </div>
-        <button id="analyzeAgent" class="primary-btn">✦ Suhbatlarni tahlil qilish</button>
-        <div id="improveSuggestions" class="suggestions"></div>
+        <div class="unanswered-box">
+          <div class="unanswered-head"><h3>🧠 Javobsiz / takomillashtirish savollari</h3><span id="unansweredCountLabel">0 ta</span></div>
+          <div id="unansweredList" class="unanswered-list"><div class="unanswered-empty">Hozircha ma’lumot yo‘q. “Suhbatlarni tahlil qilish” tugmasini bosing.</div></div>
+          <div class="unanswered-note">Hozirgi serverdagi mavjud tahlil endpointi yaratgan Admin takliflari shu yerda ko‘rsatiladi. Ular tasdiqlangandagina bilim bazasiga qo‘shiladi.</div>
+        </div>
+        <div id="improveSuggestions" class="suggestions" style="display:none"></div>
       </div>
 
-      <div id="tab-ai" class="tab-panel">
-        <div class="warning-box">API kalitini GitHub'ga ochiq repository orqali joylash xavfsiz emas. Bu loyiha GitHub Pages bo‘lgani uchun kalit brauzerga ko‘rinadi. Test uchun ishlatishingiz mumkin, doimiy/ishlab chiqarish uchun backend proxy kerak.</div>
-        <label>Gemini API kaliti<input id="apiKey" type="password" placeholder="AIza..."></label>
-        <label>Model<input id="apiModel" placeholder="gemini-2.5-flash"></label>
-        <div class="two-col">
-          <label>Temperature<input id="temperature" type="number" min="0" max="2" step="0.1"></label>
-          <label>Max output tokens<input id="maxTokens" type="number" min="64" max="8192" step="64"></label>
-        </div>
-        <div class="api-status"><span id="apiStatusDot"></span><span id="apiStatusText">API sozlanmagan</span></div>
-      </div>
+      <div id="tab-ai" class="tab-panel"><div class="warning-box">API kalitini GitHub'ga ochiq repository orqali joylash xavfsiz emas. Kalit backend/Render environment'da saqlanishi kerak.</div><label>Gemini API kaliti<input id="apiKey" type="password" placeholder="Serverda boshqariladi"></label><label>Model<input id="apiModel" placeholder="gemini-2.5-flash"></label><div class="two-col"><label>Temperature<input id="temperature" type="number" min="0" max="2" step="0.1"></label><label>Max output tokens<input id="maxTokens" type="number" min="64" max="8192" step="64"></label></div><div class="api-status"><span id="apiStatusDot"></span><span id="apiStatusText">API sozlanmagan</span></div></div>
 
-      <div id="settingsError" class="form-error"></div>
-      <div class="modal-actions sticky-actions"><button class="secondary-btn" data-close="settingsModal">Yopish</button><button id="saveSettings" class="primary-btn">Saqlash</button></div>
+      <div id="settingsError" class="form-error"></div><div class="modal-actions sticky-actions"><button class="secondary-btn" data-close="settingsModal">Yopish</button><button id="saveSettings" class="primary-btn">Saqlash</button></div>
     </div>
   </div>
 
   <div id="mobileOverlay" class="mobile-overlay hidden"></div>
   <script src="config.js"></script>
   <script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+  (() => {
+    'use strict';
+    const TOKEN_KEY='qamir_auth_token_v3';
+    const token=()=>localStorage.getItem(TOKEN_KEY)||'';
+    const authHeaders=()=>token()?{Authorization:'Bearer '+token()}:{};
+    async function adminApi(path, options={}){
+      const headers={...authHeaders(),...(options.body?{'Content-Type':'application/json'}:{})};
+      const r=await fetch(path,{...options,headers});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+      return d;
+    }
+    const $=id=>document.getElementById(id);
+    let items=[];
+    function renderItems(){
+      const list=$('unansweredList');
+      if(!list)return;
+      $('unansweredCountLabel').textContent=items.length+' ta';
+      $('statUnanswered').textContent=items.length;
+      if(!items.length){list.innerHTML='<div class="unanswered-empty">Hozircha taklif yo‘q. Tahlilni ishga tushiring.</div>';return;}
+      list.innerHTML=items.map((s,i)=>{
+        const countText='';
+        return `<div class="unanswered-item" data-id="${s.id}"><div class="u-top"><div class="u-rank">${i+1}</div><div class="u-text"><b>${escapeHtml(s.title||'Takomillashtirish taklifi')}</b><div>${escapeHtml(s.text||'')}</div><div class="u-count">Holat: ${escapeHtml(s.status||'pending')}</div></div></div><div class="u-actions"><button class="secondary-btn" data-add="${s.id}">✅ Bilimga qo‘shish</button><button class="secondary-btn" data-reject="${s.id}">❌ Rad etish</button></div></div>`;
+      }).join('');
+      list.querySelectorAll('[data-add]').forEach(b=>b.onclick=async()=>{try{await adminApi('/api/admin/improve/'+b.dataset.add+'/approve',{method:'POST'});toastSafe('Bilim bazasiga qo‘shildi.');await refresh();}catch(e){toastSafe(e.message)}});
+      list.querySelectorAll('[data-reject]').forEach(b=>b.onclick=async()=>{try{await adminApi('/api/admin/improve/'+b.dataset.reject+'/reject',{method:'POST'});toastSafe('Taklif rad etildi.');await refresh();}catch(e){toastSafe(e.message)}});
+    }
+    function escapeHtml(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+    function toastSafe(t){const x=$('toast');if(x){x.textContent=t;x.classList.add('show');clearTimeout(window.__qt);window.__qt=setTimeout(()=>x.classList.remove('show'),2600)}}
+    async function refresh(){
+      try{
+        const [stats,sugg]=await Promise.all([adminApi('/api/admin/stats'),adminApi('/api/admin/improve')]);
+        if($('statMessages'))$('statMessages').textContent=stats.messages??0;
+        if($('statKnowledge'))$('statKnowledge').textContent=stats.knowledge??0;
+        items=Array.isArray(sugg.suggestions)?sugg.suggestions:[];
+        renderItems();
+      }catch(e){console.error('Improve panel:',e);toastSafe(e.message)}
+    }
+    $('refreshUnanswered')?.addEventListener('click',refresh);
+    $('analyzeAgent')?.addEventListener('click',async()=>{
+      try{await adminApi('/api/admin/improve/analyze',{method:'POST'});toastSafe('Suhbatlar tahlil qilindi.');await refresh();}
+      catch(e){toastSafe(e.message)}
+    });
+    $('exportUnanswered')?.addEventListener('click',async()=>{
+      try{
+        await refresh();
+        if(!items.length){toastSafe('Eksport qilinadigan ma’lumot yo‘q.');return;}
+        if(!window.XLSX){toastSafe('Excel moduli yuklanmadi. Internetni tekshiring.');return;}
+        const rows=items.map((x,i)=>({'#':i+1,'Sarlavha':x.title||'','Savol/Taklif':x.text||'','Holat':x.status||'pending','Sana':x.created_at||''}));
+        const ws=XLSX.utils.json_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Javobsizlar');XLSX.writeFile(wb,'qamir_javobsiz_savollar.xlsx');
+      }catch(e){toastSafe(e.message)}
+    });
+    const improveTab=document.querySelector('.tab[data-tab="improve"]');
+    if(improveTab) improveTab.addEventListener('click',()=>setTimeout(refresh,50));
+  })();
+  </script>
 </body>
 </html>
