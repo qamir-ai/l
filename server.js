@@ -1152,6 +1152,139 @@ async function searchLexUz(userText) {
 
 const DICTIONARY_API_BASE = "https://api.dictionaryapi.dev/api/v2/entries";
 
+// Qamir AI ichki qisqa lug‘ati. Gemini bo‘lmasa ham asosiy
+// IT atamalariga javob beradi. Keyin tashqi lug‘atlar fallback bo‘ladi.
+const QAMIR_DICTIONARY = {
+  kompyuter: {
+    aliases: ["computer"],
+    definition: "Ma’lumotlarni qayta ishlash, saqlash va turli dasturlarni ishga tushirish uchun ishlatiladigan elektron qurilma."
+  },
+  server: {
+    aliases: ["server"],
+    definition: "Tarmoqdagi boshqa qurilmalar yoki dasturlarga ma’lumot, xizmat yoki resurs taqdim etadigan kompyuter yoki dastur."
+  },
+  algoritm: {
+    aliases: ["algorithm"],
+    definition: "Muammoni hal qilish yoki vazifani bajarish uchun bosqichma-bosqich bajariladigan aniq ko‘rsatmalar ketma-ketligi."
+  },
+  vpn: {
+    aliases: ["vpn"],
+    definition: "Internet ulanishini shifrlash va foydalanuvchi qurilmasi bilan masofadagi tarmoq o‘rtasida himoyalangan aloqa yaratishga xizmat qiladigan texnologiya."
+  },
+  internet: {
+    aliases: ["internet"],
+    definition: "Dunyo bo‘ylab kompyuterlar va boshqa qurilmalarni o‘zaro bog‘laydigan global tarmoq."
+  },
+  dastur: {
+    aliases: ["software", "program"],
+    definition: "Kompyuter yoki boshqa qurilmada muayyan vazifani bajarish uchun yaratilgan dasturiy ta’minot."
+  },
+  fayl: {
+    aliases: ["file"],
+    definition: "Kompyuterda saqlanadigan ma’lumotlar to‘plami; masalan, hujjat, rasm, video yoki dastur fayli."
+  },
+  papka: {
+    aliases: ["folder", "directory"],
+    definition: "Fayllar va boshqa papkalarni tartibli saqlash uchun ishlatiladigan katalog."
+  },
+  tarmoq: {
+    aliases: ["network"],
+    definition: "Bir-biri bilan ma’lumot almashadigan qurilmalar va ulanishlar majmuasi."
+  },
+  brauzer: {
+    aliases: ["browser"],
+    definition: "Veb-saytlarni ochish va internetdagi sahifalar bilan ishlash uchun mo‘ljallangan dastur."
+  },
+  sayt: {
+    aliases: ["website", "site"],
+    definition: "Internetda bitta domen yoki manzil ostida joylashgan o‘zaro bog‘langan veb-sahifalar majmuasi."
+  },
+  baza: {
+    aliases: ["database"],
+    definition: "Ma’lumotlarni tartibli saqlash, boshqarish va izlash uchun mo‘ljallangan ma’lumotlar to‘plami."
+  },
+  "ma’lumotlar bazasi": {
+    aliases: ["database"],
+    definition: "Ma’lumotlarni tartibli saqlash, boshqarish va izlash uchun mo‘ljallangan ma’lumotlar to‘plami."
+  },
+  dasturchi: {
+    aliases: ["programmer", "developer"],
+    definition: "Dasturlar va dasturiy tizimlarni yaratadigan, sinaydigan va takomillashtiradigan mutaxassis."
+  },
+  kod: {
+    aliases: ["code"],
+    definition: "Dastur ishlashini ta’minlaydigan dasturlash tilida yozilgan buyruqlar va ko‘rsatmalar to‘plami."
+  },
+  api: {
+    aliases: ["api"],
+    definition: "Turli dastur va xizmatlarning bir-biri bilan ma’lumot almashishi uchun belgilangan interfeys va qoidalar to‘plami."
+  },
+  hosting: {
+    aliases: ["hosting", "web hosting"],
+    definition: "Sayt yoki server xizmatining internet orqali ishlashi uchun resurslarni joylashtirib beradigan xizmat."
+  },
+  domen: {
+    aliases: ["domain"],
+    definition: "Internetdagi saytning odamlar o‘qishi va eslab qolishi oson bo‘lgan nomi, masalan example.com."
+  },
+  protokol: {
+    aliases: ["protocol"],
+    definition: "Qurilmalar yoki dasturlar o‘rtasida ma’lumot almashish tartibini belgilovchi qoidalar to‘plami."
+  },
+  ip: {
+    aliases: ["ip address", "ip"],
+    definition: "Tarmoqdagi qurilmani aniqlash uchun ishlatiladigan raqamli manzil."
+  },
+  wifi: {
+    aliases: ["wifi", "wi-fi"],
+    definition: "Qurilmalarni simsiz tarmoqqa ulash uchun ishlatiladigan texnologiya."
+  },
+  bluetooth: {
+    aliases: ["bluetooth"],
+    definition: "Yaqin masofadagi qurilmalar o‘rtasida simsiz ma’lumot almashish texnologiyasi."
+  },
+  "operatsion tizim": {
+    aliases: ["operating system", "os"],
+    definition: "Kompyuterning apparat va dasturiy resurslarini boshqaradigan asosiy tizim dasturi, masalan Windows, Linux yoki Android."
+  },
+  windows: {
+    aliases: ["windows"],
+    definition: "Microsoft tomonidan ishlab chiqilgan kompyuterlar uchun operatsion tizimlar oilasi."
+  },
+  linux: {
+    aliases: ["linux"],
+    definition: "Unix-ga o‘xshash ochiq kodli operatsion tizimlar oilasi va uning yadrosi asosidagi tizimlar majmuasi."
+  },
+  android: {
+    aliases: ["android"],
+    definition: "Asosan smartfon va planshetlar uchun ishlatiladigan mobil operatsion tizim."
+  },
+  antivirus: {
+    aliases: ["antivirus"],
+    definition: "Zararli dasturlarni aniqlash, bloklash va o‘chirishga yordam beradigan dasturiy ta’minot."
+  },
+  virus: {
+    aliases: ["computer virus"],
+    definition: "Kompyuterga zarar yetkazishi, ma’lumotlarni o‘zgartirishi yoki boshqa tizimlarga tarqalishi mumkin bo‘lgan zararli dastur turi."
+  },
+  backup: {
+    aliases: ["backup"],
+    definition: "Muhim ma’lumotlarning yo‘qolib qolmasligi uchun yaratilgan zaxira nusxa."
+  },
+  shifrlash: {
+    aliases: ["encryption"],
+    definition: "Ma’lumotni maxsus usul yordamida begona shaxslar uchun o‘qib bo‘lmaydigan ko‘rinishga keltirish jarayoni."
+  },
+  parol: {
+    aliases: ["password"],
+    definition: "Hisob yoki tizimga kirishni himoyalash uchun ishlatiladigan maxfiy belgilar ketma-ketligi."
+  },
+  "bulutli xizmat": {
+    aliases: ["cloud service", "cloud computing"],
+    definition: "Hisoblash, saqlash yoki dasturiy xizmatlardan internet orqali masofadan foydalanish usuli."
+  }
+};
+
 function normalizeDictionaryText(text) {
   return decodeHtmlEntities(String(text || ""))
     .toLowerCase()
@@ -1203,6 +1336,9 @@ function cleanDictionaryQuery(text) {
   if (m) return m[1].trim().replace(/^["']|["']$/g, "").slice(0, 160);
 
   m = q.match(/^["']?(.+?)["']?\s+soz(?:ining|ning)\s+manosi(?:\s+nima)?\s*$/iu);
+  if (m) return m[1].trim().replace(/^["']|["']$/g, "").slice(0, 160);
+
+  m = q.match(/^(.+?)\s+(?:nima(?:\s+degani)?|meaning|definition)\s*$/iu);
   if (m) return m[1].trim().replace(/^["']|["']$/g, "").slice(0, 160);
 
   m = q.match(/^(.+?)ga\s+ta['’]?rif\s+ber\s*$/iu);
@@ -1403,11 +1539,84 @@ async function wiktionaryLookup(language, word) {
   return null;
 }
 
+function normalizeDictionaryWord(text) {
+  return normalizeDictionaryText(text)
+    .replace(/\b(?:a|an|the)\b/gi, " ")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findInternalDictionaryEntry(word) {
+  const target = normalizeDictionaryWord(word);
+  if (!target) return null;
+
+  for (const [key, entry] of Object.entries(QAMIR_DICTIONARY)) {
+    if (normalizeDictionaryWord(key) === target) {
+      return { key, ...entry };
+    }
+
+    for (const alias of entry.aliases || []) {
+      if (normalizeDictionaryWord(alias) === target) {
+        return { key, ...entry };
+      }
+    }
+  }
+
+  return null;
+}
+
+function makeDictionaryVariants(word) {
+  const variants = [];
+  const seen = new Set();
+  const add = value => {
+    const v = normalizeDictionaryWord(value);
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    variants.push(v);
+  };
+
+  add(word);
+
+  const internal = findInternalDictionaryEntry(word);
+  if (internal) {
+    for (const alias of internal.aliases || []) add(alias);
+  }
+
+  // O‘zbekcha oddiy ko‘plik/kelishik qo‘shimchalarini ehtiyotkorlik bilan olib tashlaymiz.
+  const forms = [
+    /(.+?)ning$/i,
+    /(.+?)ni$/i,
+    /(.+?)ga$/i,
+    /(.+?)da$/i,
+    /(.+?)dan$/i,
+    /(.+?)lar$/i
+  ];
+
+  for (const re of forms) {
+    const m = word.match(re);
+    if (m && m[1].length >= 3) add(m[1]);
+  }
+
+  return variants.slice(0, 8);
+}
+
 async function getDictionaryAnswer(text) {
   if (!looksLikeDictionaryQuestion(text)) return null;
 
   const word = cleanDictionaryQuery(text);
   if (!word || word.length < 2) return null;
+
+  // 1) Avval Qamir AI ichki lug‘ati. Bu qism Gemini API keysiz ham ishlaydi.
+  const internal = findInternalDictionaryEntry(word);
+  if (internal) {
+    return {
+      answer: `📖 ${internal.key}\n\n${internal.definition}`,
+      source: "dictionary_internal",
+      word: internal.key,
+      language: "uz"
+    };
+  }
 
   // Qamir AI ichidagi Gemini kaliti mavjud bo‘lsa,
   // o‘zbekcha lug‘at so‘rovlari uchun birinchi navbatda
@@ -1443,11 +1652,13 @@ async function getDictionaryAnswer(text) {
   }
 
   const languageCandidates = dictionaryLanguageCandidates(word);
+  const variants = makeDictionaryVariants(word);
 
-  // 2) Wiktionary — API key kerak emas.
+  // 2) Wiktionary — API key kerak emas. Bir nechta yozilish variantini sinaymiz.
   for (const language of languageCandidates) {
-    try {
-      const page = await wiktionaryLookup(language, word);
+    for (const variant of variants) {
+      try {
+        const page = await wiktionaryLookup(language, variant);
       if (page) {
         const cleaned = page.extract
           .replace(/^(?:[A-Z][^\n]{0,80}\n){0,2}/, "")
@@ -1466,8 +1677,9 @@ async function getDictionaryAnswer(text) {
           };
         }
       }
-    } catch (e) {
-      console.error(`DICTIONARY WIKTIONARY ${language.toUpperCase()} ERROR:`, e.message);
+      } catch (e) {
+        console.error(`DICTIONARY WIKTIONARY ${language.toUpperCase()} VARIANT ERROR:`, e.message);
+      }
     }
   }
 
@@ -1475,26 +1687,28 @@ async function getDictionaryAnswer(text) {
   for (const language of languageCandidates) {
     if (language === "uz") continue;
 
-    try {
-      const entries = await dictionaryApiLookup(language, word);
-      if (!entries.length) continue;
+    for (const variant of variants) {
+      try {
+        const entries = await dictionaryApiLookup(language, variant);
+        if (!entries.length) continue;
 
-      const lines = [`📖 ${entries[0].word}`];
+        const lines = [`📖 ${entries[0].word}`];
 
-      for (const item of entries.slice(0, 5)) {
-        const prefix = item.partOfSpeech ? `${item.partOfSpeech}: ` : "";
-        lines.push(`• ${prefix}${item.definition}`);
-        if (item.example) lines.push(`  Misol: ${item.example}`);
+        for (const item of entries.slice(0, 5)) {
+          const prefix = item.partOfSpeech ? `${item.partOfSpeech}: ` : "";
+          lines.push(`• ${prefix}${item.definition}`);
+          if (item.example) lines.push(`  Misol: ${item.example}`);
+        }
+
+        return {
+          answer: lines.join("\n"),
+          source: "dictionary_api",
+          word: entries[0].word,
+          language
+        };
+      } catch (e) {
+        console.error(`DICTIONARY API ${language.toUpperCase()} VARIANT ERROR:`, e.message);
       }
-
-      return {
-        answer: lines.join("\n"),
-        source: "dictionary_api",
-        word: entries[0].word,
-        language
-      };
-    } catch (e) {
-      console.error(`DICTIONARY API ${language.toUpperCase()} ERROR:`, e.message);
     }
   }
 
