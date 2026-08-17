@@ -1108,7 +1108,7 @@ function cleanWikipediaQuery(
         ""
       )
       .replace(
-        /\b(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi)\b/gi,
+        /\b(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi|who|who is|кто|кто такой|кто такая)\b/gi,
         " "
       )
       .replace(
@@ -1145,7 +1145,16 @@ function looksLikeWikipediaQuestion(
     /\bkim ixtiro qilgan\b/i,
     /\bqachon vafot etgan\b/i,
     /\bqachon tugilgan\b/i,
-    /\bqayerda tugilgan\b/i
+    /\bqayerda tugilgan\b/i,
+
+    /\bwho\b/i,
+    /\bwho is\b/i,
+    /\bwho was\b/i,
+
+    /\bкто\b/i,
+    /\bкто такой\b/i,
+    /\bкто такая\b/i,
+    /\bбиография\b/i
   ];
 
   return explicitPatterns.some(
@@ -1217,7 +1226,6 @@ function cleanWikipediaHtml(
     .trim();
 }
 
-// TUZATILGAN WIKIPEDIA SCORE
 function scoreWikipediaTitle(
   query,
   title
@@ -1386,7 +1394,9 @@ async function wikipediaSearchRaw(
             "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
           "Api-User-Agent":
             "QamirAI/1.0 (Qamir AI personal assistant)"
-        }
+        },
+        signal:
+          AbortSignal.timeout(12000)
       }
     );
 
@@ -1453,6 +1463,10 @@ async function wikipediaSearchRaw(
   };
 }
 
+// ------------------------------------------------------------
+// WIKIPEDIA EXACT PAGE / REST SUMMARY FALLBACK
+// ------------------------------------------------------------
+
 async function wikipediaGetPage(
   language,
   title
@@ -1466,7 +1480,7 @@ async function wikipediaGetPage(
     `&prop=extracts|info` +
     `&exintro=1` +
     `&explaintext=1` +
-    `&exchars=4000` +
+    `&exchars=5000` +
     `&inprop=url` +
     `&redirects=1` +
     `&titles=${encodeURIComponent(title)}` +
@@ -1474,86 +1488,152 @@ async function wikipediaGetPage(
     `&formatversion=2` +
     `&origin=*`;
 
-  const response =
-    await fetch(
-      url,
-      {
-        method: "GET",
-        headers: {
-          "User-Agent":
-            "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
-          "Api-User-Agent":
-            "QamirAI/1.0 (Qamir AI personal assistant)"
+  try {
+    const response =
+      await fetch(
+        url,
+        {
+          method: "GET",
+          headers: {
+            "User-Agent":
+              "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
+            "Api-User-Agent":
+              "QamirAI/1.0 (Qamir AI personal assistant)"
+          },
+          signal:
+            AbortSignal.timeout(12000)
         }
-      }
-    );
-
-  if (!response.ok) {
-    const body =
-      await response
-        .text()
-        .catch(
-          () => ""
-        );
-
-    console.error(
-      `Wikipedia page ${language} HTTP ${response.status}:`,
-      body.slice(
-        0,
-        500
-      )
-    );
-
-    return null;
-  }
-
-  const data =
-    await response
-      .json()
-      .catch(
-        () => ({})
       );
 
-  const page =
-    Array.isArray(
-      data?.query?.pages
-    )
-      ? data.query.pages[0]
-      : null;
+    if (response.ok) {
+      const data =
+        await response
+          .json()
+          .catch(
+            () => ({})
+          );
 
-  if (
-    !page ||
-    page.missing
-  ) {
-    return null;
+      const page =
+        Array.isArray(
+          data?.query?.pages
+        )
+          ? data.query.pages[0]
+          : null;
+
+      if (
+        page &&
+        !page.missing
+      ) {
+        const extract =
+          cleanWikipediaHtml(
+            page.extract ||
+            ""
+          );
+
+        if (extract) {
+          return {
+            title:
+              String(
+                page.title ||
+                title
+              ).trim(),
+
+            extract,
+
+            url:
+              String(
+                page.fullurl ||
+                ""
+              ).trim()
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.error(
+      `Wikipedia exact page error [${language}]:`,
+      e.message
+    );
   }
 
-  const extract =
-    cleanWikipediaHtml(
-      page.extract ||
-      ""
+  // REST API fallback.
+  try {
+    const summaryUrl =
+      `${base}/api/rest_v1/page/summary/` +
+      encodeURIComponent(
+        String(title || "").replace(
+          / /g,
+          "_"
+        )
+      );
+
+    const summaryResponse =
+      await fetch(
+        summaryUrl,
+        {
+          method: "GET",
+          headers: {
+            "Accept":
+              "application/json",
+            "User-Agent":
+              "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)"
+          },
+          signal:
+            AbortSignal.timeout(12000)
+        }
+      );
+
+    if (
+      !summaryResponse.ok
+    ) {
+      return null;
+    }
+
+    const summary =
+      await summaryResponse
+        .json()
+        .catch(
+          () => ({})
+        );
+
+    const extract =
+      cleanWikipediaHtml(
+        summary?.extract ||
+        summary?.description ||
+        ""
+      );
+
+    if (!extract) {
+      return null;
+    }
+
+    return {
+      title:
+        String(
+          summary?.title ||
+          title
+        ).trim(),
+
+      extract,
+
+      url:
+        String(
+          summary?.content_urls
+            ?.desktop
+            ?.page ||
+          ""
+        ).trim()
+    };
+  } catch (e) {
+    console.error(
+      `Wikipedia REST summary error [${language}]:`,
+      e.message
     );
 
-  if (!extract) {
     return null;
   }
-
-  return {
-    title:
-      String(
-        page.title ||
-        title
-      ).trim(),
-    extract,
-    url:
-      String(
-        page.fullurl ||
-        ""
-      ).trim()
-  };
 }
 
-// TUZATILGAN VARIANT QIDIRUVI
 function makeWikipediaVariants(
   query,
   suggestion = ""
@@ -1739,11 +1819,10 @@ async function fetchWikipediaFromLanguage(
       );
     }
 
-    if (
-      !uniquePages.length
-    ) {
-      return null;
-    }
+    // ----------------------------------------
+    // 1. Avval qidiruv natijasidan eng yaxshi
+    // sahifani topamiz.
+    // ----------------------------------------
 
     let bestPage = null;
     let bestScore = -1;
@@ -1775,45 +1854,110 @@ async function fetchWikipediaFromLanguage(
       }
     }
 
-    // TUZATILDI: xato yozilgan ismga ruxsat
-    if (
-      !bestPage ||
-      bestScore < 85
-    ) {
-      console.log(
-        `Wikipedia [${language}]: mos sahifa topilmadi. Eng yaxshi score=${bestScore}`
-      );
+    // ----------------------------------------
+    // 2. Natija kuchli bo'lsa olamiz.
+    // ----------------------------------------
 
-      return null;
+    if (
+      bestPage &&
+      bestScore >= 85
+    ) {
+      const page =
+        await wikipediaGetPage(
+          language,
+          bestPage.title
+        );
+
+      if (page) {
+        console.log(
+          `Wikipedia topildi [${language}]:`,
+          page.title,
+          `score=${bestScore}`
+        );
+
+        return {
+          language,
+          title:
+            page.title,
+          description:
+            "",
+          extract:
+            page.extract,
+          url:
+            page.url
+        };
+      }
     }
 
-    const page =
-      await wikipediaGetPage(
-        language,
-        bestPage.title
-      );
+    // ----------------------------------------
+    // 3. Qidiruv topmasa, queryning o'zidan
+    // to'g'ridan-to'g'ri sahifa ochishga urinib
+    // ko'ramiz.
+    // ----------------------------------------
 
-    if (!page) {
-      return null;
+    const directVariants =
+      [
+        query,
+        query
+          .replace(
+            /\b(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi|who|who is|who was|кто|кто такой|кто такая|биография)\b/gi,
+            " "
+          )
+          .replace(
+            /\s+/g,
+            " "
+          )
+          .trim()
+      ];
+
+    for (
+      const variant
+      of directVariants
+    ) {
+      if (
+        !variant
+      ) {
+        continue;
+      }
+
+      try {
+        const page =
+          await wikipediaGetPage(
+            language,
+            variant
+          );
+
+        if (page) {
+          console.log(
+            `Wikipedia direct page topildi [${language}]:`,
+            page.title
+          );
+
+          return {
+            language,
+            title:
+              page.title,
+            description:
+              "",
+            extract:
+              page.extract,
+            url:
+              page.url
+          };
+        }
+      } catch (e) {
+        console.error(
+          "Wikipedia direct fallback error:",
+          e.message
+        );
+      }
     }
 
     console.log(
-      `Wikipedia topildi [${language}]:`,
-      page.title,
-      `score=${bestScore}`
+      `Wikipedia [${language}]: mos sahifa topilmadi. Eng yaxshi score=${bestScore}`
     );
 
-    return {
-      language,
-      title:
-        page.title,
-      description:
-        "",
-      extract:
-        page.extract,
-      url:
-        page.url
-    };
+    return null;
 
   } catch (error) {
     console.error(
@@ -1853,16 +1997,27 @@ async function searchWikipedia(
     query
   );
 
+  // O'zbekcha.
   let result =
     await fetchWikipediaFromLanguage(
       "uz",
       query
     );
 
+  // Inglizcha.
   if (!result) {
     result =
       await fetchWikipediaFromLanguage(
         "en",
+        query
+      );
+  }
+
+  // Ruscha.
+  if (!result) {
+    result =
+      await fetchWikipediaFromLanguage(
+        "ru",
         query
       );
   }
@@ -3752,7 +3907,6 @@ const TRANSLATION_LANGUAGES = {
     "o'zbekcha",
     "o'zbekga",
     "o'zbekchaga",
-    "o‘'zbek",
     "узбек",
     "узбекский",
     "узбекча",
@@ -3764,7 +3918,6 @@ const TRANSLATION_LANGUAGES = {
     "ruscha",
     "rusga",
     "ruschaga",
-    "russ",
     "russian",
     "русский",
     "русскому",
@@ -4023,8 +4176,11 @@ function translationLanguageCode(
         if (
           bestScore < 100
         ) {
-          bestCode = code;
-          bestScore = 100;
+          bestCode =
+            code;
+
+          bestScore =
+            100;
         }
 
         continue;
@@ -4295,7 +4451,7 @@ function removeTranslationCommand(
 
 // ============================================================
 // MUHIM TUZATISH:
-// TRANSLATOR FAQAT BUYRUQ BO'LSA ISHLAYDI
+// TRANSLATOR FAQAT ANIQ BUYRUQ BO'LSA ISHLAYDI
 // ============================================================
 
 function findTranslationIntent(
@@ -4314,21 +4470,24 @@ function findTranslationIntent(
       original
     );
 
-  // Faqat aniq tarjima buyrug'i bo'lsa translator ishga tushadi.
+  // Translator faqat buyruq bilan ishlaydi.
   //
-  // Ishlaydi:
-  // "perevot ruschaga salom"
-  // "perevod inglizchaga hello"
-  // "ruschaga tarjima qil: salom"
-  // "translate to english: salom"
+  // ISHLAYDI:
+  // perevot ruschaga salom
+  // perevod inglizchaga salom
+  // ruschaga tarjima qil: salom
+  // translate to english: salom
   //
-  // Ishlamaydi:
-  // "men ruscha bilaman"
-  // "inglizcha gaplashamiz"
-  // "ruscha matn"
+  // ISHLAMAYDI:
+  // men ruscha bilaman
+  // ruscha gaplashaman
+  // ruscha bilasanmi
+  // Steve Jobs kim?
+  // Albert Einstein kim?
   //
+
   const hasCommand =
-    /(?:tarjima|tarjma|o'gir|ogir|o'girish|ogirish|perevod|perevot|perewot|translate|перевод|переведи)/iu
+    /(?:^|\s)(?:tarjima|tarjma|o'gir|ogir|o'girish|ogirish|perevod|perevot|perewot|translate|перевод|переведи)(?:\s|:|$)/iu
       .test(q);
 
   if (!hasCommand) {
@@ -4967,6 +5126,9 @@ app.get(
         translator:
           true,
 
+        wikipedia:
+          true,
+
         model:
           process.env
             .GEMINI_MODEL ||
@@ -5299,6 +5461,7 @@ app.post(
                      answer, raw_text AS text,
                      type, enabled,
                      created_at, updated_at`,
+
           [
             String(
               title
@@ -5539,6 +5702,7 @@ app.put(
           updated_at = NOW()
         WHERE id = 1
       `,
+
         [
           s.agent_name ||
             "Qamir",
@@ -5659,6 +5823,7 @@ app.put(
             last_seen = NOW()
           WHERE id = $6
         `,
+
           [
             String(
               email
@@ -5697,6 +5862,7 @@ app.put(
             last_seen = NOW()
           WHERE id = $5
         `,
+
           [
             String(
               email
@@ -5736,6 +5902,7 @@ app.put(
           FROM users
           WHERE id = $1
         `,
+
           [
             req.user.id
           ]
@@ -5788,6 +5955,7 @@ app.get(
         ORDER BY created_at ASC
         LIMIT 300
         `,
+
         [
           req.user.id
         ]
@@ -5836,6 +6004,7 @@ app.post(
           ORDER BY created_at DESC
           LIMIT 40
           `,
+
           [
             req.user.id
           ]
@@ -5848,6 +6017,7 @@ app.post(
         `INSERT INTO messages
          (user_id, sender, text)
          VALUES ($1, 'user', $2)`,
+
         [
           req.user.id,
           text
@@ -5858,6 +6028,7 @@ app.post(
         `UPDATE users
          SET last_seen = NOW()
          WHERE id = $1`,
+
         [
           req.user.id
         ]
@@ -5886,6 +6057,7 @@ app.post(
               id, sender, text,
               created_at
             `,
+
             [
               req.user.id,
               dateTimeAnswer.answer
@@ -5931,6 +6103,7 @@ app.post(
               id, sender, text,
               created_at
             `,
+
             [
               req.user.id,
               calc.answer
@@ -5995,6 +6168,7 @@ app.post(
                   id, sender, text,
                   created_at
                 `,
+
                 [
                   req.user.id,
                   translated.translated
@@ -6037,6 +6211,8 @@ app.post(
             e.message
           );
 
+          // Faqat haqiqiy tarjima buyrug'i bo'lsa
+          // translator xatosini ko'rsatamiz.
           const saved =
             await db(
               `
@@ -6048,6 +6224,7 @@ app.post(
                 id, sender, text,
                 created_at
               `,
+
               [
                 req.user.id,
                 "Tarjima xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring."
@@ -6063,9 +6240,6 @@ app.post(
 
             source:
               "translator_error",
-
-            error:
-              e.message,
 
             matched_knowledge:
               [],
@@ -6236,6 +6410,7 @@ app.post(
             id, sender, text,
             created_at
           `,
+
           [
             req.user.id,
             answer
@@ -6454,6 +6629,7 @@ app.post(
              LOWER($1) ||
              '%'
            LIMIT 1`,
+
           [
             topic
           ]
@@ -6467,6 +6643,7 @@ app.post(
              (title, text)
            VALUES
              ($1, $2)`,
+
           [
             "Ko‘p so‘raladigan mavzu",
 
@@ -6496,6 +6673,7 @@ app.post(
          FROM suggestions
          WHERE id = $1
            AND status = 'pending'`,
+
         [
           Number(
             req.params.id
@@ -6523,6 +6701,7 @@ app.post(
          raw_text, type)
        VALUES
         ($1, '', $2, $2, 'general')`,
+
       [
         s.title,
         s.text
@@ -6533,6 +6712,7 @@ app.post(
       `UPDATE suggestions
        SET status = 'approved'
        WHERE id = $1`,
+
       [
         s.id
       ]
@@ -6556,6 +6736,7 @@ app.post(
       `UPDATE suggestions
        SET status = 'rejected'
        WHERE id = $1`,
+
       [
         Number(
           req.params.id
@@ -6615,6 +6796,10 @@ initDb()
         );
 
         console.log(
+          "Translator: command-only mode enabled"
+        );
+
+        console.log(
           "Translator: Google public + LibreTranslate fallback enabled"
         );
 
@@ -6627,7 +6812,11 @@ initDb()
         );
 
         console.log(
-          "Wikipedia search: enabled"
+          "Wikipedia: Uzbek + English + Russian fallback enabled"
+        );
+
+        console.log(
+          "Wikipedia direct-page fallback: enabled"
         );
 
         console.log(
@@ -6662,4 +6851,3 @@ process.on(
     process.exit(0);
   }
 );
-```
