@@ -115,55 +115,272 @@ function getDateTimeAnswer(text) {
 }
 
 // ============================================================
-// WIKIPEDIA — typo tolerant + rewritten-query support
+// WIKIPEDIA — kengroq savol aniqlash + xavfsiz qidiruv
 // ============================================================
 function cleanWikipediaQuery(text) {
-  return String(text || "").trim().replace(/[?!.]+$/g, "").replace(/\b(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi)\b/gi, " ").replace(/\s+/g, " ").trim();
+  return String(text || "")
+    .trim()
+    .replace(/[?!.]+$/g, "")
+    .replace(/\b(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi|who|who is|who was|кто|кто такой|кто такая|биография)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
+
 function looksLikeWikipediaQuestion(text) {
-  const q = normalize(text); if (!q || q.length < 2) return false;
-  return [ /\bkim\b/i, /\bkimdir\b/i, /\bhaqida\b/i, /\btogrisida\b/i, /\bbiografiya\b/i, /\btarjimai holi\b/i, /\bkim yaratgan\b/i, /\bkim asos solgan\b/i, /\bkim ixtiro qilgan\b/i, /\bqachon vafot etgan\b/i, /\bqachon tugilgan\b/i, /\bqayerda tugilgan\b/i ].some(p => p.test(q));
+  const q = normalize(text);
+  if (!q || q.length < 2) return false;
+  if (looksLikeWeatherQuestion(q) || looksLikeCurrencyQuestion(q) || looksLikeLexUzQuestion(q)) return false;
+
+  const explicit = [
+    /\bkim\b/i,/\bkimdir\b/i,/\bhaqida\b/i,/\btogrisida\b/i,/\bbiografiya\b/i,
+    /\btarjimai holi\b/i,/\bkim yaratgan\b/i,/\bkim asos solgan\b/i,/\bkim ixtiro qilgan\b/i,
+    /\bqachon tugilgan\b/i,/\bqachon vafot etgan\b/i,/\bqayerda tugilgan\b/i,
+    /\bpoytaxti\b/i,/\bqaysi davlat\b/i,/\bqaysi mamlakat\b/i,/\bqayerda joylashgan\b/i,
+    /\bjoylashgan\b/i,/\bnima bilan mashhur\b/i,/\bwho is\b/i,/\bwho was\b/i,/\bкто\b/i,/\bбиография\b/i
+  ];
+  if (explicit.some(p => p.test(q))) return true;
+
+  if (/[?]$/.test(String(text || "").trim())) {
+    const qWords = tokenizeRaw(q);
+    const qs = new Set(["nima","qaysi","qayer","qayerda","qachon","kim","qanday","poytaxti","davlat","shahar","daryo","tog","orol","sayyora","tarix"]);
+    return qWords.length >= 2 && qWords.length <= 10 && qWords.some(w => qs.has(w));
+  }
+  return false;
 }
-function cleanWikipediaHtml(text) { return String(text || "").replace(/<br\s*\/?\>/gi,"\n").replace(/<span[^>]*>/gi,"").replace(/<\/span>/gi,"").replace(/<[^>]*>/g,"").replace(/&quot;/g,'"').replace(/&#039;/g,"'").replace(/&#39;/g,"'").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&#160;/g," ").replace(/\s+\n/g,"\n").replace(/\n\s+/g,"\n").replace(/[ \t]+/g," ").trim(); }
+
+function cleanWikipediaHtml(text) {
+  return String(text || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<span[^>]*>/gi, "")
+    .replace(/<\/span>/gi, "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;|&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#160;/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n\s+/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+
 function scoreWikipediaTitle(query, title) {
-  const qWords = tokenizeRaw(query).filter(w => w.length >= 2), tWords = tokenizeRaw(title).filter(w => w.length >= 2); if (!qWords.length || !tWords.length) return 0; let score = 0, matched = 0;
-  for (const qw of qWords) { let best = 0; for (const tw of tWords) { if (qw === tw) best = Math.max(best,100); else if (qw.startsWith(tw) || tw.startsWith(qw)) best = Math.max(best,72); else { const d = levenshtein(qw,tw); if (d===1) best=Math.max(best,65); else if(d===2) best=Math.max(best,48); else if(d===3) best=Math.max(best,25); } } if(best>0){matched++; score += best;} }
-  score += (matched / Math.max(qWords.length,1)) * 80; if(normalize(title)===normalize(query)) score += 250; return score;
+  const qWords = tokenizeRaw(query).filter(w => w.length >= 2);
+  const tWords = tokenizeRaw(title).filter(w => w.length >= 2);
+  if (!qWords.length || !tWords.length) return 0;
+
+  let score = 0;
+  let matched = 0;
+  for (const qw of qWords) {
+    let best = 0;
+    for (const tw of tWords) {
+      if (qw === tw) best = Math.max(best, 110);
+      else if (qw.length >= 4 && tw.length >= 4 && (qw.startsWith(tw) || tw.startsWith(qw))) best = Math.max(best, 80);
+      else {
+        const d = levenshtein(qw, tw);
+        if (d === 1) best = Math.max(best, 65);
+        else if (d === 2 && qw.length >= 5 && tw.length >= 5) best = Math.max(best, 45);
+      }
+    }
+    if (best) { matched++; score += best; }
+  }
+
+  score += (matched / Math.max(qWords.length, 1)) * 100;
+  if (normalize(title) === normalize(query)) score += 300;
+  if (qWords.length >= 2 && matched >= 2) score += 50;
+  return score;
 }
+
 async function wikipediaSearchRaw(language, query, limit = 10) {
-  const base = `https://${language}.wikipedia.org`, url = `${base}/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=0&srlimit=${Math.min(50,Math.max(1,limit))}&srinfo=suggestion|rewrittenquery|totalhits&srenablerewrites=1&srprop=snippet|titlesnippet|sectiontitle|categorysnippet&format=json&formatversion=2&origin=*`;
+  const base = `https://${language}.wikipedia.org`;
+  const url = `${base}/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=0&srlimit=${Math.min(50, Math.max(1, limit))}&srprop=snippet|titlesnippet|sectiontitle|categorysnippet&format=json&formatversion=2&origin=*`;
+
   try {
-    const response = await fetch(url, { headers:{ "User-Agent":"QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)", "Api-User-Agent":"QamirAI/1.0 (Qamir AI personal assistant)" }, signal:AbortSignal.timeout(12000) });
-    if(!response.ok){ console.error(`Wikipedia ${language} HTTP ${response.status}`); return {pages:[],suggestion:"",rewrittenQuery:""}; }
-    const data = await response.json().catch(()=>({})), info = data?.query?.searchinfo || {};
-    const pages = Array.isArray(data?.query?.search) ? data.query.search.map(item => ({ title:String(item?.title||"").trim(), pageid:item?.pageid||null, snippet:cleanWikipediaHtml(item?.snippet||"") })) : [];
-    return { pages, suggestion:String(info?.suggestion||"").trim(), rewrittenQuery:String(info?.rewrittenquery||info?.rewrittenQuery||"").trim() };
-  } catch(e){ console.error(`Wikipedia ${language} SEARCH ERROR:`, e.message); return {pages:[],suggestion:"",rewrittenQuery:""}; }
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "User-Agent": "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
+        "Api-User-Agent": "QamirAI/1.0 (Qamir AI personal assistant)"
+      },
+      signal: AbortSignal.timeout(12000)
+    });
+
+    if (!response.ok) return { pages: [], suggestion: "" };
+    const data = await response.json().catch(() => ({}));
+    const pages = Array.isArray(data?.query?.search)
+      ? data.query.search.map(item => ({
+          title: String(item?.title || "").trim(),
+          pageid: item?.pageid || null,
+          snippet: cleanWikipediaHtml(item?.snippet || "")
+        }))
+      : [];
+
+    return {
+      pages,
+      suggestion: String(data?.query?.searchinfo?.suggestion || "").trim()
+    };
+  } catch (e) {
+    console.error(`Wikipedia ${language} SEARCH ERROR:`, e.message);
+    return { pages: [], suggestion: "" };
+  }
 }
+
 async function wikipediaGetPage(language, title) {
-  const base=`https://${language}.wikipedia.org`, url=`${base}/w/api.php?action=query&prop=extracts|info&exintro=1&explaintext=1&exchars=4000&inprop=url&redirects=1&titles=${encodeURIComponent(title)}&format=json&formatversion=2&origin=*`;
-  try{
-    const response=await fetch(url,{headers:{"User-Agent":"QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)","Api-User-Agent":"QamirAI/1.0 (Qamir AI personal assistant)"},signal:AbortSignal.timeout(12000)});
-    if(!response.ok)return null; const data=await response.json().catch(()=>({})); const page=Array.isArray(data?.query?.pages)?data.query.pages[0]:null; if(!page||page.missing)return null; const extract=cleanWikipediaHtml(page.extract||""); if(!extract)return null; return {title:String(page.title||title).trim(),extract,url:String(page.fullurl||"").trim()};
-  }catch(e){console.error(`Wikipedia page ${language} ERROR:`,e.message);return null;}
+  const base = `https://${language}.wikipedia.org`;
+
+  try {
+    const url = `${base}/w/api.php?action=query&prop=extracts|info&exintro=1&explaintext=1&exchars=5000&inprop=url&redirects=1&titles=${encodeURIComponent(title)}&format=json&formatversion=2&origin=*`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "User-Agent": "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
+        "Api-User-Agent": "QamirAI/1.0 (Qamir AI personal assistant)"
+      },
+      signal: AbortSignal.timeout(12000)
+    });
+
+    if (response.ok) {
+      const data = await response.json().catch(() => ({}));
+      const page = Array.isArray(data?.query?.pages) ? data.query.pages[0] : null;
+      if (page && !page.missing) {
+        const extract = cleanWikipediaHtml(page.extract || "");
+        if (extract) {
+          return {
+            title: String(page.title || title).trim(),
+            extract,
+            url: String(page.fullurl || "").trim()
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.error(`Wikipedia page ${language} API ERROR:`, e.message);
+  }
+
+  try {
+    const summaryUrl = `${base}/api/rest_v1/page/summary/${encodeURIComponent(String(title || "").replace(/ /g, "_"))}`;
+    const response = await fetch(summaryUrl, {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "QamirAI/1.0 (Qamir AI personal assistant)"
+      },
+      signal: AbortSignal.timeout(12000)
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json().catch(() => ({}));
+    const extract = cleanWikipediaHtml(data?.extract || data?.description || "");
+    if (!extract) return null;
+
+    return {
+      title: String(data?.title || title).trim(),
+      extract,
+      url: String(data?.content_urls?.desktop?.page || "").trim()
+    };
+  } catch (e) {
+    console.error(`Wikipedia ${language} REST ERROR:`, e.message);
+    return null;
+  }
 }
-function makeWikipediaVariants(query,suggestion="",rewrittenQuery="") {
-  const variants=[],seen=new Set(),add=value=>{const v=String(value||"").trim().replace(/\s+/g," "),k=normalize(v);if(v.length<2||!k||seen.has(k))return;seen.add(k);variants.push(v);};
-  add(query); add(suggestion); add(rewrittenQuery); const words=tokenizeRaw(query).filter(w=>w.length>=3); if(words.length>1)add(words.join(" ")); for(const w of words)add(w); return variants.slice(0,10);
+
+function makeWikipediaVariants(query, suggestion = "") {
+  const variants = [];
+  const seen = new Set();
+  const add = value => {
+    const v = String(value || "").trim().replace(/\s+/g, " ");
+    const key = normalize(v);
+    if (!v || v.length < 2 || !key || seen.has(key)) return;
+    seen.add(key);
+    variants.push(v);
+  };
+
+  add(query);
+  add(suggestion);
+  add(cleanWikipediaQuery(query));
+
+  const words = tokenizeRaw(cleanWikipediaQuery(query)).filter(w => w.length >= 3);
+  if (words.length > 1) add(words.join(" "));
+  for (const word of words) add(word);
+
+  return variants.slice(0, 10);
 }
+
 async function fetchWikipediaFromLanguage(language, query) {
   try {
-    const first=await wikipediaSearchRaw(language,query,15), variants=makeWikipediaVariants(query,first.suggestion,first.rewrittenQuery); let allPages=[...(first.pages||[])];
-    for(const variant of variants){if(normalize(variant)===normalize(query))continue; const r=await wikipediaSearchRaw(language,variant,15); allPages.push(...(r.pages||[]));}
-    const uniquePages=[],seen=new Set(); for(const item of allPages){const title=String(item?.title||"").trim(),key=normalize(title);if(!title||!key||seen.has(key))continue;seen.add(key);uniquePages.push(item);} if(!uniquePages.length)return null;
-    let bestPage=null,bestScore=-1; const qNorm=normalize(query),qWords=tokenizeRaw(query);
-    for(const candidate of uniquePages){const title=String(candidate?.title||"").trim(),snippet=normalize(candidate?.snippet||""); let score=scoreWikipediaTitle(query,title); for(const w of qWords) if(w.length>=4 && snippet.includes(w)) score += 18; const tn=normalize(title); if(tn===qNorm)score+=300; if(tn.includes(qNorm)||qNorm.includes(tn))score+=120; if(score>bestScore){bestScore=score;bestPage=candidate;}}
-    if(!bestPage||bestScore<65)return null; const page=await wikipediaGetPage(language,bestPage.title); if(!page)return null; return {language,title:page.title,description:"",extract:page.extract,url:page.url};
-  }catch(e){console.error(`WIKIPEDIA ${language.toUpperCase()} ERROR:`,e.message);return null;}
+    const first = await wikipediaSearchRaw(language, query, 12);
+    let allPages = [...(first.pages || [])];
+
+    for (const variant of makeWikipediaVariants(query, first.suggestion).slice(0, 6)) {
+      if (normalize(variant) === normalize(query)) continue;
+      const result = await wikipediaSearchRaw(language, variant, 8);
+      allPages.push(...(result.pages || []));
+    }
+
+    const unique = [];
+    const seen = new Set();
+    for (const item of allPages) {
+      const title = String(item?.title || "").trim();
+      const key = normalize(title);
+      if (!title || !key || seen.has(key)) continue;
+      seen.add(key);
+      unique.push(item);
+    }
+
+    if (!unique.length) return null;
+
+    const qNorm = normalize(query);
+    let bestPage = null;
+    let bestScore = -1;
+
+    for (const candidate of unique) {
+      const title = String(candidate?.title || "").trim();
+      const snippet = normalize(candidate?.snippet || "");
+      let score = scoreWikipediaTitle(query, title);
+      const titleNorm = normalize(title);
+      if (titleNorm === qNorm) score += 400;
+      if (titleNorm.includes(qNorm) || qNorm.includes(titleNorm)) score += 130;
+      for (const word of tokenizeRaw(query).filter(w => w.length >= 4)) {
+        if (snippet.includes(word)) score += 12;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestPage = candidate;
+      }
+    }
+
+    if (!bestPage || bestScore < 100) return null;
+
+    const page = await wikipediaGetPage(language, bestPage.title);
+    if (!page) return null;
+
+    return {
+      language,
+      title: page.title,
+      description: "",
+      extract: page.extract,
+      url: page.url
+    };
+  } catch (e) {
+    console.error(`WIKIPEDIA ${language.toUpperCase()} ERROR:`, e.message);
+    return null;
+  }
 }
-async function searchWikipedia(userText) { if(!looksLikeWikipediaQuestion(userText))return null; const query=cleanWikipediaQuery(userText); if(!query||query.length<2)return null; let result=await fetchWikipediaFromLanguage("uz",query); if(!result)result=await fetchWikipediaFromLanguage("en",query); return result; }
 
+async function searchWikipedia(userText) {
+  if (!looksLikeWikipediaQuestion(userText)) return null;
+  const query = cleanWikipediaQuery(userText);
+  if (!query || query.length < 2) return null;
 
+  for (const language of ["uz", "en", "ru"]) {
+    const result = await fetchWikipediaFromLanguage(language, query);
+    if (result) return result;
+  }
+
+  return null;
+}
 
 // ============================================================
 // OB-HAVO - OPEN-METEO
@@ -214,6 +431,7 @@ function cleanWeatherCity(text) {
   return String(text || "")
     .trim()
     .replace(/[?!.,:;]+/g, " ")
+    .replace(/[\-–—]+/g, " ")
     .replace(/\b(?:ob\s+havo|obxavo|havo|pogoda|weather|temperatura|harorat)\b/giu, " ")
     .replace(/\b(?:bugun|bugungi|bugungi\s+kuni|ertaga|ertangi|hozir|hozirgi)\b/giu, " ")
     .replace(/\b(?:qanday|qanaqa|nechi|necha|gradus|yogadimi|yog‘adimi)\b/giu, " ")
@@ -566,9 +784,9 @@ async function getCurrencyAnswer(text) {
 // ============================================================
 
 // ============================================================
-// WIKIDATA — TUZATILGAN, QAT'IY MOSLASH VA NIZOZLI ENTITYLARNI FILTRLASH
+// WIKIDATA — API KEY TALAB QILMAYDI
+// Faqat juda ishonchli entity mosligi uchun ishlatiladi.
 // ============================================================
-
 const WIKIDATA_API_URL = "https://www.wikidata.org/w/api.php";
 
 function normalizeWikidataText(text) {
@@ -583,370 +801,108 @@ function normalizeWikidataText(text) {
 function looksLikeWikidataQuestion(text) {
   const q = normalizeWikidataText(text);
   if (!q || q.length < 2) return false;
-
-  const explicit = [
-    /\bkim\b/i,
-    /\bkimdir\b/i,
-    /\bhaqida\b/i,
-    /\bbiografiya\b/i,
-    /\btarjimai holi\b/i,
-    /\btugilgan\b/i,
-    /\bvafot etgan\b/i,
-    /\bqachon tugilgan\b/i,
-    /\bqayerda tugilgan\b/i,
-    /\bmillati\b/i,
-    /\bfuqaroligi\b/i,
-    /\bkasbi\b/i,
-    /\blavozimi\b/i,
-    /\bpoytaxti\b/i,
-    /\bqaysi davlat\b/i,
-    /\bqaysi mamlakat\b/i,
-    /\bqayerda joylashgan\b/i,
-    /\bjoylashgan\b/i
-  ];
-
-  return explicit.some((pattern) => pattern.test(q));
+  if (looksLikeLexUzQuestion(q) || looksLikeWeatherQuestion(q) || looksLikeCurrencyQuestion(q)) return false;
+  return [
+    /\bkim\b/i,/\bkimdir\b/i,/\bhaqida\b/i,/\bbiografiya\b/i,
+    /\btugilgan\b/i,/\bvafot etgan\b/i,/\bmillati\b/i,/\bfuqaroligi\b/i,
+    /\bkasbi\b/i,/\blavozimi\b/i,/\bpoytaxti\b/i,/\bqayerda joylashgan\b/i
+  ].some(p => p.test(q));
 }
 
-function cleanWikidataValue(text) {
-  return String(text || "").replace(/\s+/g, " ").trim();
-}
+function cleanWikidataValue(text){return String(text||"").replace(/\s+/g," ").trim();}
+function getWikidataLabel(entity,language="uz"){return cleanWikidataValue(entity?.labels?.[language]?.value||entity?.labels?.en?.value||entity?.labels?.ru?.value||"");}
+function getWikidataDescription(entity,language="uz"){return cleanWikidataValue(entity?.descriptions?.[language]?.value||entity?.descriptions?.en?.value||entity?.descriptions?.ru?.value||"");}
+function getWikidataAliases(entity,language="uz"){const out=[];for(const lang of [language,"en","ru"]){for(const a of entity?.aliases?.[lang]||[]){const v=cleanWikidataValue(a?.value||"");if(v&&!out.includes(v))out.push(v);}}return out.slice(0,10);}
+function wikidataTimeToUzbek(value){const m=String(value||"").match(/^[+-]?(\d{1,6})-(\d{2})-(\d{2})/);return m?`${m[3]}.${m[2]}.${m[1]}`:"";}
+function getWikidataClaimEntityIds(entity,property){const claims=entity?.claims?.[property];if(!Array.isArray(claims))return[];const out=[];for(const c of claims.slice(0,8)){const id=c?.mainsnak?.datavalue?.value?.id;if(typeof id==='string'&&/^Q\d+$/i.test(id)&&!out.includes(id))out.push(id);}return out;}
+function getWikidataClaimTime(entity,property){const claims=entity?.claims?.[property];if(!Array.isArray(claims))return"";for(const c of claims.slice(0,8)){const t=c?.mainsnak?.datavalue?.value?.time;if(t)return wikidataTimeToUzbek(t);}return"";}
 
-function getWikidataLabel(entity, language = "uz") {
-  return cleanWikidataValue(
-    entity?.labels?.[language]?.value ||
-    entity?.labels?.en?.value ||
-    entity?.labels?.ru?.value ||
-    entity?.id ||
-    ""
-  );
-}
-
-function getWikidataDescription(entity, language = "uz") {
-  return cleanWikidataValue(
-    entity?.descriptions?.[language]?.value ||
-    entity?.descriptions?.en?.value ||
-    entity?.descriptions?.ru?.value ||
-    ""
-  );
-}
-
-function getWikidataAliases(entity, language = "uz") {
-  const aliases = [];
-  for (const lang of [language, "en", "ru"]) {
-    for (const item of entity?.aliases?.[lang] || []) {
-      const value = cleanWikidataValue(item?.value || "");
-      if (value && !aliases.includes(value)) aliases.push(value);
-    }
-  }
-  return aliases.slice(0, 20);
-}
-
-function wikidataTimeToUzbek(value) {
-  const time = String(value || "").trim();
-  const m = time.match(/^[+-]?(\d{1,6})-(\d{2})-(\d{2})/);
-  if (!m) return "";
-  return `${m[3]}.${m[2]}.${m[1]}`;
-}
-
-function getWikidataClaimEntityIds(entity, property) {
-  const claims = entity?.claims?.[property];
-  if (!Array.isArray(claims)) return [];
-
-  const ids = [];
-  for (const claim of claims.slice(0, 10)) {
-    const id = claim?.mainsnak?.datavalue?.value?.id;
-    if (typeof id === "string" && /^Q\d+$/i.test(id) && !ids.includes(id)) {
-      ids.push(id);
-    }
-  }
-  return ids;
-}
-
-function getWikidataClaimTime(entity, property) {
-  const claims = entity?.claims?.[property];
-  if (!Array.isArray(claims)) return "";
-
-  for (const claim of claims.slice(0, 10)) {
-    const value = claim?.mainsnak?.datavalue?.value?.time || "";
-    if (value) return wikidataTimeToUzbek(value);
-  }
-  return "";
-}
-
-function getWikidataSearchIntent(userText) {
-  const q = normalizeWikidataText(userText);
-  return {
-    person: /\bkim\b|\bkimdir\b|\bbiografiya\b|\btarjimai holi\b|\btugilgan\b|\bvafot etgan\b|\bkasbi\b|\bmillati\b|\bfuqaroligi\b/i.test(q),
-    capital: /\bpoytaxti\b/i.test(q),
-    place: /\bqayerda joylashgan\b|\bjoylashgan\b|\bqaysi davlat\b|\bqaysi mamlakat\b/i.test(q)
-  };
-}
-
-function scoreWikidataSearchResult(query, item, intent) {
-  const q = normalizeWikidataText(query);
-  const label = normalizeWikidataText(item?.label || "");
-  const description = normalizeWikidataText(item?.description || "");
-  const aliases = (item?.aliases || []).map(normalizeWikidataText).filter(Boolean);
-
-  if (!q || !label) return 0;
-
-  let score = 0;
-  const qWords = q.split(/\s+/).filter(Boolean);
-  const labelWords = label.split(/\s+/).filter(Boolean);
-
-  if (q === label) score += 360;
-  else if (q.includes(label)) score += 220;
-  else if (label.includes(q)) score += 170;
-
-  let matched = 0;
-  for (const qw of qWords) {
-    let hit = false;
-    for (const lw of labelWords) {
-      if (qw === lw) {
-        score += 85;
-        hit = true;
-        break;
-      }
-      if (qw.length >= 4 && lw.length >= 4 && (qw.startsWith(lw) || lw.startsWith(qw))) {
-        score += 50;
-        hit = true;
-        break;
-      }
-      if (levenshtein(qw, lw) <= 1) {
-        score += 32;
-        hit = true;
-        break;
-      }
-    }
-    if (hit) matched++;
-  }
-
-  for (const alias of aliases) {
-    if (q === alias) score += 240;
-    else if (alias === q || alias.includes(q) || q.includes(alias)) score += 90;
-  }
-
-  if (description) score += Math.min(description.length, 30);
-  score += (matched / Math.max(qWords.length, 1)) * 120;
-
-  if (intent.person) {
-    const personWords = [
-      "human", "person", "scientist", "actor", "actress", "politician", "writer",
-      "singer", "athlete", "footballer", "researcher", "professor", "artist", "journalist",
-      "odam", "shaxs", "olim", "aktyor", "aktrisa", "yozuvchi", "siyosatchi", "xonanda"
-    ];
-    const personLike = personWords.some((w) => description.includes(w));
-    if (personLike) score += 100;
-    else score -= 80;
-  }
-
-  if (intent.capital) {
-    if (/country|state|republic|davlat|mamlakat|republic/i.test(description)) score += 45;
-  }
-
-  if (intent.place) {
-    if (/city|settlement|country|state|location|shahar|davlat|mamlakat|joylashuv/i.test(description)) score += 45;
-  }
-
-  return Math.round(score);
-}
-
-async function wikidataApiRequest(params) {
-  const query = new URLSearchParams({
-    ...params,
-    format: "json",
-    formatversion: "2",
-    origin: "*"
-  });
-
-  const url = `${WIKIDATA_API_URL}?${query.toString()}`;
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Accept": "application/json",
-      "User-Agent": "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)"
-    },
-    signal: AbortSignal.timeout(12000)
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(`Wikidata HTTP ${response.status}`);
-  if (data?.error) throw new Error(data.error.info || "Wikidata API xatosi");
+async function wikidataApiRequest(params){
+  const query=new URLSearchParams({...params,format:"json",formatversion:"2",origin:"*"});
+  const response=await fetch(`${WIKIDATA_API_URL}?${query.toString()}`,{method:"GET",headers:{Accept:"application/json","User-Agent":"QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)"},signal:AbortSignal.timeout(12000)});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(`Wikidata HTTP ${response.status}`);
+  if(data?.error)throw new Error(data.error.info||"Wikidata API xatosi");
   return data;
 }
+async function wikidataSearchEntities(language,query,limit=8){const data=await wikidataApiRequest({action:"wbsearchentities",search:query,language,uselang:language,type:"item",limit:String(Math.min(20,Math.max(1,limit)))});return Array.isArray(data?.search)?data.search:[];}
+async function wikidataGetEntities(ids){if(!ids.length)return{};const data=await wikidataApiRequest({action:"wbgetentities",ids:ids.slice(0,20).join("|"),props:"labels|descriptions|aliases|claims",languages:"uz|en|ru"});return data?.entities||{};}
 
-async function wikidataSearchEntities(language, query, limit = 10) {
-  const data = await wikidataApiRequest({
-    action: "wbsearchentities",
-    search: query,
-    language,
-    uselang: language,
-    type: "item",
-    limit: String(Math.min(20, Math.max(1, limit)))
-  });
-  return Array.isArray(data?.search) ? data.search : [];
+function wikidataCandidateScore(query,item){
+  const q=normalizeWikidataText(query),label=normalizeWikidataText(item?.label||""),aliases=(item?.aliases||[]).map(normalizeWikidataText).filter(Boolean);
+  if(!q||!label)return{score:0,matched:0};
+  if(q===label)return{score:1000,matched:q.split(/\s+/).length};
+  let score=0,matched=0;
+  const qWords=q.split(/\s+/).filter(Boolean),lWords=label.split(/\s+/).filter(Boolean);
+  for(const qw of qWords){let best=0;for(const lw of lWords){if(qw===lw)best=Math.max(best,150);else if(qw.length>=4&&lw.length>=4&&(qw.startsWith(lw)||lw.startsWith(qw)))best=Math.max(best,95);else if(levenshtein(qw,lw)<=1)best=Math.max(best,65);}if(best){matched++;score+=best;}}
+  for(const a of aliases){if(q===a)score+=350;else if(a.includes(q)||q.includes(a))score+=120;}
+  score+=(matched/Math.max(qWords.length,1))*150;
+  return{score,matched};
 }
 
-async function wikidataGetEntities(ids) {
-  if (!ids.length) return {};
-  const data = await wikidataApiRequest({
-    action: "wbgetentities",
-    ids: ids.slice(0, 20).join("|"),
-    props: "labels|descriptions|aliases|claims|sitelinks",
-    languages: "uz|en|ru",
-    sitefilter: "uzwiki|enwiki|ruwiki"
-  });
-  return data?.entities || {};
-}
+async function searchWikidata(userText){
+  if(!looksLikeWikidataQuestion(userText))return null;
+  const query=String(userText||"").trim().replace(/[?!.]+$/g,"").replace(/\b(?:kim|kimdir|haqida|biografiya|tarjimai holi|qachon tugilgan|qayerda tugilgan|vafot etgan|millati|fuqaroligi|kasbi|lavozimi|poytaxti|qayerda joylashgan)\b/gi," ").replace(/\s+/g," ").trim();
+  if(!query||query.length<2)return null;
 
-function cleanWikidataUserQuery(userText) {
-  return String(userText || "")
-    .trim()
-    .replace(/[?!.]+$/g, "")
-    .replace(
-      /\b(?:kimdir|kim|haqida|biografiya|tarjimai holi|kim yaratgan|kim asos solgan|kim ixtiro qilgan|qachon tugilgan|qayerda tugilgan|vafot etgan|millati|fuqaroligi|kasbi|lavozimi|qaysi davlat|qaysi mamlakat|qayerda joylashgan|joylashgan|poytaxti)\b/gi,
-      " "
-    )
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-async function searchWikidata(userText) {
-  if (!looksLikeWikidataQuestion(userText)) return null;
-
-  const query = cleanWikidataUserQuery(userText);
-  if (!query || query.length < 2) return null;
-
-  const intent = getWikidataSearchIntent(userText);
-  const all = [];
-
-  for (const language of ["uz", "en", "ru"]) {
-    try {
-      const rows = await wikidataSearchEntities(language, query, 10);
-      for (const item of rows) all.push({ ...item, searchLanguage: language });
-    } catch (e) {
-      console.error(`WIKIDATA SEARCH ${language.toUpperCase()} ERROR:`, e.message);
-    }
+  const all=[];
+  for(const language of ["uz","en","ru"]){
+    try{for(const item of await wikidataSearchEntities(language,query,8))all.push({...item,searchLanguage:language});}
+    catch(e){console.error(`WIKIDATA SEARCH ${language.toUpperCase()} ERROR:`,e.message);}
   }
+  if(!all.length)return null;
 
-  const unique = [];
-  const seen = new Set();
-  for (const item of all) {
-    const id = String(item?.id || "").trim();
-    if (!/^Q\d+$/i.test(id) || seen.has(id)) continue;
-    seen.add(id);
-    unique.push(item);
-  }
+  const unique=[],seen=new Set();
+  for(const item of all){const id=String(item?.id||"").trim();if(!/^Q\d+$/i.test(id)||seen.has(id))continue;seen.add(id);unique.push(item);}
+  unique.sort((a,b)=>wikidataCandidateScore(query,b).score-wikidataCandidateScore(query,a).score);
+  const best=unique[0];if(!best)return null;
+  const scored=wikidataCandidateScore(query,best),qCount=query.split(/\s+/).filter(Boolean).length;
+  if(scored.score<220||(qCount>=2&&scored.matched<Math.min(2,qCount))){console.log(`Wikidata: ishonchli entity topilmadi. query=${query} score=${scored.score} matched=${scored.matched}`);return null;}
 
-  if (!unique.length) return null;
+  let entities={};
+  try{entities=await wikidataGetEntities([best.id]);}catch(e){console.error("WIKIDATA ENTITY ERROR:",e.message);return null;}
+  const entity=entities?.[best.id];if(!entity)return null;
 
-  unique.sort((a, b) => scoreWikidataSearchResult(query, b, intent) - scoreWikidataSearchResult(query, a, intent));
+  const label=getWikidataLabel(entity,"uz")||getWikidataLabel(entity,"en")||String(best.label||query);
+  const description=getWikidataDescription(entity,"uz")||getWikidataDescription(entity,"en")||String(best.description||"");
+  const finalScore=wikidataCandidateScore(query,{label,aliases:getWikidataAliases(entity,"uz")}).score;
+  if(finalScore<220){console.log(`Wikidata final validation failed: ${label} score=${finalScore}`);return null;}
 
-  const best = unique[0];
-  const bestScore = scoreWikidataSearchResult(query, best, intent);
-  if (bestScore < 170) {
-    console.log(`Wikidata: confidence past. score=${bestScore}`);
-    return null;
-  }
+  const birthDate=getWikidataClaimTime(entity,"P569"),deathDate=getWikidataClaimTime(entity,"P570");
+  const occupationIds=getWikidataClaimEntityIds(entity,"P106"),citizenshipIds=getWikidataClaimEntityIds(entity,"P27"),positionIds=getWikidataClaimEntityIds(entity,"P39"),capitalIds=getWikidataClaimEntityIds(entity,"P36");
+  const relatedIds=[...new Set([...occupationIds,...citizenshipIds,...positionIds,...capitalIds])].slice(0,12);
+  const related=relatedIds.length?await wikidataGetEntities(relatedIds).catch(()=>({})):{};
+  const labels=ids=>ids.map(id=>getWikidataLabel(related?.[id],"uz")||getWikidataLabel(related?.[id],"en")).filter(Boolean);
 
-  let entities = {};
-  try {
-    entities = await wikidataGetEntities([best.id]);
-  } catch (e) {
-    console.error("WIKIDATA ENTITY ERROR:", e.message);
-    return null;
-  }
-
-  const entity = entities?.[best.id];
-  if (!entity) return null;
-
-  const label = getWikidataLabel(entity, "uz") || best.label || query;
-  const description = getWikidataDescription(entity, "uz") || best.description || "";
-
-  let relatedIds = [
-    ...getWikidataClaimEntityIds(entity, "P31"),
-    ...getWikidataClaimEntityIds(entity, "P106"),
-    ...getWikidataClaimEntityIds(entity, "P27"),
-    ...getWikidataClaimEntityIds(entity, "P36"),
-    ...getWikidataClaimEntityIds(entity, "P131"),
-    ...getWikidataClaimEntityIds(entity, "P39")
-  ];
-  relatedIds = [...new Set(relatedIds)].slice(0, 16);
-
-  let related = {};
-  if (relatedIds.length) {
-    try { related = await wikidataGetEntities(relatedIds); }
-    catch (e) { console.error("WIKIDATA RELATED ENTITIES ERROR:", e.message); }
-  }
-
-  const instanceIds = getWikidataClaimEntityIds(entity, "P31");
-  const instanceLabels = instanceIds.map((id) => getWikidataLabel(related[id], "en")).filter(Boolean);
-  const isHuman = instanceIds.includes("Q5") || /human|person|odam|shaxs/i.test(instanceLabels.join(" "));
-
-  if (intent.person && !isHuman) {
-    console.log(`Wikidata: entity odam emas. ${best.id}`);
-    return null;
-  }
-
-  const occupations = getWikidataClaimEntityIds(entity, "P106")
-    .map((id) => getWikidataLabel(related[id], "uz"))
-    .filter(Boolean)
-    .slice(0, 3);
-  const citizenships = getWikidataClaimEntityIds(entity, "P27")
-    .map((id) => getWikidataLabel(related[id], "uz"))
-    .filter(Boolean)
-    .slice(0, 3);
-  const capitals = getWikidataClaimEntityIds(entity, "P36")
-    .map((id) => getWikidataLabel(related[id], "uz"))
-    .filter(Boolean)
-    .slice(0, 2);
-  const positions = getWikidataClaimEntityIds(entity, "P39")
-    .map((id) => getWikidataLabel(related[id], "uz"))
-    .filter(Boolean)
-    .slice(0, 3);
-  const locatedIn = getWikidataClaimEntityIds(entity, "P131")
-    .map((id) => getWikidataLabel(related[id], "uz"))
-    .filter(Boolean)
-    .slice(0, 2);
-
-  const aliases = getWikidataAliases(entity, "uz");
-  const birthDate = getWikidataClaimTime(entity, "P569");
-  const deathDate = getWikidataClaimTime(entity, "P570");
-
-  const lines = [`📚 ${label}`];
-  if (description) lines.push(`Tavsif: ${description}`);
-  if (birthDate) lines.push(`Tug‘ilgan: ${birthDate}`);
-  if (deathDate) lines.push(`Vafot etgan: ${deathDate}`);
-  if (occupations.length) lines.push(`Kasbi: ${occupations.join(", ")}`);
-  if (positions.length) lines.push(`Lavozimi: ${positions.join(", ")}`);
-  if (citizenships.length) lines.push(`Fuqaroligi: ${citizenships.join(", ")}`);
-  if (capitals.length) lines.push(`Poytaxti: ${capitals.join(", ")}`);
-  if (locatedIn.length) lines.push(`Joylashuvi: ${locatedIn.join(", ")}`);
-  if (aliases.length) lines.push(`Boshqa nomlari: ${aliases.slice(0, 5).join(", ")}`);
-
-  return {
-    answer: lines.join("\n"),
-    source: "wikidata",
-    id: entity.id,
-    title: label,
-    description,
-    birth_date: birthDate || null,
-    death_date: deathDate || null
-  };
+  const lines=[`📚 ${label}`];
+  if(description)lines.push(`Tavsif: ${description}`);
+  if(birthDate)lines.push(`Tug‘ilgan: ${birthDate}`);
+  if(deathDate)lines.push(`Vafot etgan: ${deathDate}`);
+  const occupations=labels(occupationIds).slice(0,3);if(occupations.length)lines.push(`Kasbi: ${occupations.join(", ")}`);
+  const positions=labels(positionIds).slice(0,3);if(positions.length)lines.push(`Lavozimi: ${positions.join(", ")}`);
+  const citizenships=labels(citizenshipIds).slice(0,3);if(citizenships.length)lines.push(`Fuqaroligi: ${citizenships.join(", ")}`);
+  const capitals=labels(capitalIds).slice(0,2);if(capitals.length)lines.push(`Poytaxti: ${capitals.join(", ")}`);
+  return{answer:lines.join("\n"),source:"wikidata",title:label,description,birth_date:birthDate||null,death_date:deathDate||null};
 }
 
 // ============================================================
-// LEX.UZ — O‘ZBEKISTON QONUNCHILIGI
-// Rasmiy LexUZ sahifalaridan qidiradi; API kalit talab qilmaydi.
+// END WIKIDATA
 // ============================================================
 
-const LEXUZ_BASE_URL = "https://lex.uz/uz";
+
+// ============================================================
+
+// ============================================================
+// LEXUZ — O'ZBEKISTON QONUNCHILIK MA'LUMOTLARI MILLIY BAZASI
+// Ochiq LexUZ sahifalaridan foydalanadi; alohida API key talab qilmaydi.
+// ============================================================
+const LEXUZ_BASE_URL = "https://lex.uz";
 
 function normalizeLexUzText(text) {
   return String(text || "")
     .toLowerCase()
     .replace(/[ʻ’‘`´]/g, "'")
+    .replace(/[^\p{L}\p{N}\s\-№]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -954,267 +910,231 @@ function normalizeLexUzText(text) {
 function looksLikeLexUzQuestion(text) {
   const q = normalizeLexUzText(text);
   if (!q) return false;
-
-  const patterns = [
-    /lex\.?\s*uz/i,
-    /qonun/i,
-    /qonunchilik/i,
-    /kodeks/i,
-    /modda/i,
-    /farmon/i,
-    /farmoyish/i,
-    /qaror/i,
-    /mehnat kodeksi/i,
-    /fuqarolik kodeksi/i,
-    /jinoyat kodeksi/i,
-    /ma'muriy/i,
-    /konstitutsiya/i,
-    /o['’‘`]?rq[- ]?\d+/i,
-    /pf[- ]?\d+/i,
-    /pq[- ]?\d+/i,
-    /vmq[- ]?\d+/i
-  ];
-
-  return patterns.some((pattern) => pattern.test(q));
+  return [
+    /\bmodda\b/i,/\bmoddasiga\b/i,/\bmoddasida\b/i,
+    /\bkonstitutsiya\b/i,/\bkodeks\b/i,/\bqonun\b/i,/\bqonunchilik\b/i,
+    /\bfarmon\b/i,/\bqaror\b/i,/\bfarmoyish\b/i,/\bO['’]?RQ[- ]?\d+/i,
+    /\bPQ[- ]?\d+/i,/\bPF[- ]?\d+/i,/\blexuz\b/i,/\bhuquq\b/i,
+    /\bhuquqlari\b/i,/\bmajburiyat\b/i,/\bjavobgarlik\b/i
+  ].some(p => p.test(q));
 }
 
 function cleanLexUzQuery(text) {
   return String(text || "")
     .trim()
     .replace(/[?!.]+$/g, "")
-    .replace(/lex\.?\s*uz/gi, " ")
-    .replace(/\b(?:ayting|aniqlang|tushuntirib bering|tushuntir|haqida|to'g'risida|togrisida|nima deydi|nima deyiladi|qaysi modda|moddasi|modda)\b/gi, " ")
+    .replace(/\b(?:lexuz|lex\.uz|modda|moddasi|moddasini|nima|qanday|qaysi|belgilangan)\b/giu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function decodeHtmlEntities(text) {
-  return String(text || "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&#039;/gi, "'")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">");
+function extractLexUzArticleNumber(text) {
+  const m = String(text || "").match(/(?:^|\s)(\d{1,4})\s*[-–—]?\s*modda\b/i);
+  return m ? Number(m[1]) : null;
 }
 
-function stripLexUzHtml(html) {
-  return decodeHtmlEntities(
-    String(html || "")
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<[^>]+>/g, " ")
-  )
+function lexUzHtmlToText(html) {
+  return String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<br\s*\/?>(?:\r?\n)?/gi, "\n")
+    .replace(/<\/p>|<\/div>|<\/li>|<\/tr>|<\/h[1-6]>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&#039;/gi, "'")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\r/g, "")
     .replace(/[ \t]+/g, " ")
     .replace(/\n\s+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-function extractLexUzId(href) {
-  const m = String(href || "").match(/\/docs\/(-?\d+)/i);
-  return m ? m[1] : "";
+function normalizeLexHref(href) {
+  const v = String(href || "").trim();
+  if (!v) return "";
+  if (/^https?:\/\//i.test(v)) return v;
+  return `${LEXUZ_BASE_URL}${v.startsWith("/") ? "" : "/"}${v}`;
+}
+
+async function lexUzFetch(url) {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+      "Accept-Language": "uz,ru;q=0.8,en;q=0.6",
+      "User-Agent": "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)"
+    },
+    signal: AbortSignal.timeout(15000)
+  });
+  const body = await response.text().catch(() => "");
+  if (!response.ok) throw new Error(`LexUZ HTTP ${response.status}: ${body.slice(0, 200)}`);
+  return body;
 }
 
 function parseLexUzSearchResults(html) {
   const results = [];
   const seen = new Set();
-  const source = String(html || "");
-  const anchorRe = /<a\b[^>]*href=["']([^"']*\/docs\/(-?\d+)[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
-
-  let match;
-  while ((match = anchorRe.exec(source))) {
-    const href = match[1];
-    const id = extractLexUzId(href);
-    if (!id || seen.has(id)) continue;
-
-    const title = stripLexUzHtml(match[3]);
-    if (!title || title.length < 4) continue;
-
-    const around = stripLexUzHtml(source.slice(match.index, Math.min(source.length, match.index + 1800)));
-    const url = `https://lex.uz/docs/${id}`;
-    const meta = around.replace(title, "").trim();
-
-    seen.add(id);
-    results.push({ id, title, url, meta });
-    if (results.length >= 12) break;
+  const re = /<a\b[^>]*href=["']([^"']*\/uz\/docs\/-?\d+[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(String(html || "")))) {
+    const href = normalizeLexHref(m[1]);
+    const title = lexUzHtmlToText(m[2]).replace(/\s+/g, " ").trim();
+    const key = href.toLowerCase();
+    if (!href || !title || title.length < 4 || seen.has(key)) continue;
+    seen.add(key);
+    results.push({ title, url: href });
+    if (results.length >= 15) break;
   }
-
   return results;
 }
 
-async function fetchLexUzUrl(url) {
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Accept": "text/html,application/xhtml+xml",
-      "User-Agent": "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)"
-    },
-    signal: AbortSignal.timeout(15000)
-  });
+function scoreLexUzResult(query, item) {
+  const qWords = tokenizeRaw(query).filter(w => w.length >= 2);
+  const title = normalizeLexUzText(item?.title || "");
+  const tWords = title.split(/\s+/).filter(Boolean);
+  if (!qWords.length || !tWords.length) return 0;
 
-  const html = await response.text();
-  if (!response.ok) throw new Error(`LexUZ HTTP ${response.status}`);
-  return html;
+  let score = 0, matched = 0;
+  const qNorm = normalizeLexUzText(query);
+  if (title === qNorm) score += 500;
+  if (title.includes(qNorm) || qNorm.includes(title)) score += 180;
+
+  for (const q of qWords) {
+    let best = 0;
+    for (const t of tWords) {
+      if (q === t) best = Math.max(best, 100);
+      else if (q.length >= 4 && t.length >= 4 && (q.startsWith(t) || t.startsWith(q))) best = Math.max(best, 65);
+      else if (levenshtein(q, t) <= 1) best = Math.max(best, 45);
+    }
+    if (best) { matched++; score += best; }
+  }
+
+  return score + (matched / Math.max(qWords.length, 1)) * 100;
 }
 
-async function lexUzSearchRaw(query) {
-  const encoded = encodeURIComponent(query);
-  const urls = [
-    `${LEXUZ_BASE_URL}/search/all?query=${encoded}`,
-    `${LEXUZ_BASE_URL}/search/all?search=${encoded}`,
-    `${LEXUZ_BASE_URL}/search/all?text=${encoded}`
-  ];
+function extractLexUzArticle(text, articleNumber) {
+  if (!articleNumber) return "";
+  const plain = String(text || "");
 
-  for (const url of urls) {
-    try {
-      const html = await fetchLexUzUrl(url);
-      const results = parseLexUzSearchResults(html);
-      if (results.length) return results;
-    } catch (e) {
-      console.error("LEXUZ SEARCH ERROR:", e.message);
-    }
-  }
+  const re = new RegExp(
+    `(?:^|\\n|\\s)${articleNumber}\\s*-?\\s*modda\\b[\\s:.-]*`,
+    "i"
+  );
 
-  return [];
+  const match = plain.match(re);
+  if (!match || match.index == null) return "";
+
+  const start = match.index;
+  const after = plain.slice(start);
+  const next = after.search(/(?:\n|\s+)\d{1,4}\s*-?\s*modda\b/i);
+  const chunk = (next > 0 ? after.slice(0, next) : after).trim();
+
+  return chunk.slice(0, 6000).trim();
 }
 
-function chooseLexUzSearchResult(results, query) {
-  const q = normalizeLexUzText(query);
-  const qWords = q.split(/\s+/).filter((w) => w.length >= 2);
-
-  let best = null;
-  let bestScore = -1;
-
-  for (const item of results) {
-    const title = normalizeLexUzText(item.title);
-    let score = 0;
-
-    if (title === q) score += 300;
-    if (title.includes(q)) score += 180;
-
-    let hits = 0;
-    for (const word of qWords) {
-      if (title.includes(word)) {
-        score += 40;
-        hits++;
-      }
-    }
-
-    score += (hits / Math.max(qWords.length, 1)) * 80;
-
-    if (/o['’‘`]?rq[- ]?\d+|pf[- ]?\d+|pq[- ]?\d+|vmq[- ]?\d+/i.test(q)) {
-      if (title.includes(q)) score += 180;
-    }
-
-    if (score > bestScore) {
-      bestScore = score;
-      best = item;
-    }
-  }
-
-  return best || results[0] || null;
-}
-
-function findLexUzSnippet(body, query, articleNumber = "") {
-  const text = stripLexUzHtml(body);
-  const normalized = normalizeLexUzText(text);
-  let index = -1;
-
-  const needles = [];
-  if (articleNumber) {
-    needles.push(`${articleNumber}-modda`, `${articleNumber} -modda`, `${articleNumber}-moddasi`);
-  }
-  for (const word of normalizeLexUzText(query).split(/\s+/).filter((w) => w.length >= 4).slice(0, 5)) {
-    needles.push(word);
-  }
-
-  for (const needle of needles) {
-    const i = normalized.indexOf(normalizeLexUzText(needle));
-    if (i >= 0) {
-      index = i;
-      break;
-    }
-  }
-
-  if (index < 0) return text.slice(0, 900);
-
-  const start = Math.max(0, index - 260);
-  const end = Math.min(text.length, index + 900);
-  return text.slice(start, end).trim();
-}
-
-async function fetchLexUzDocument(doc, query) {
-  try {
-    const html = await fetchLexUzUrl(doc.url);
-    const text = stripLexUzHtml(html);
-
-    const titleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
-      html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-
-    const title = titleMatch
-      ? stripLexUzHtml(titleMatch[1])
-      : doc.title;
-
-    const articleMatch = String(query).match(/\b(\d{1,4})\s*[- ]?modda\b/i);
-    const articleNumber = articleMatch ? articleMatch[1] : "";
-    const snippet = findLexUzSnippet(html, query, articleNumber);
-
-    const lines = [`⚖️ ${title || doc.title}`];
-    if (articleNumber) lines.push(`So‘ralgan modda: ${articleNumber}-modda`);
-    if (snippet) lines.push(`\n${snippet}`);
-    lines.push(`\nLexUZ: ${doc.url}`);
-
-    return {
-      answer: lines.join("\n"),
-      source: "lexuz",
-      title: title || doc.title,
-      url: doc.url,
-      document_id: doc.id,
-      snippet
-    };
-  } catch (e) {
-    console.error("LEXUZ DOCUMENT ERROR:", e.message);
-    return {
-      answer: `⚖️ ${doc.title}\n\nLexUZ hujjati: ${doc.url}`,
-      source: "lexuz",
-      title: doc.title,
-      url: doc.url,
-      document_id: doc.id,
-      snippet: ""
-    };
-  }
-}
 
 async function searchLexUz(userText) {
   if (!looksLikeLexUzQuestion(userText)) return null;
 
-  const query = cleanLexUzQuery(userText);
-  if (!query || query.length < 2) return null;
+  const articleNumber = extractLexUzArticleNumber(userText);
+  const original = String(userText || "").trim();
+  const cleaned = cleanLexUzQuery(original);
+  const queries = [];
 
-  const queries = [query];
-  const m = query.match(/\b(?:o['’‘`]?rq|pf|pq|vmq)[- ]?\d+\b/i);
-  if (m) {
-    const exact = m[0].replace(/\s+/g, "");
-    if (!queries.includes(exact)) queries.unshift(exact);
+  const addQuery = q => {
+    const v = String(q || "").replace(/\s+/g, " ").trim();
+    if (!v || queries.some(x => normalizeLexUzText(x) === normalizeLexUzText(v))) return;
+    queries.push(v);
+  };
+
+  addQuery(original.replace(/[?!.]+$/g, ""));
+  if (articleNumber) {
+    addQuery(`O'zbekiston Respublikasi Konstitutsiyasi ${articleNumber}-modda`);
+    addQuery(`Konstitutsiya ${articleNumber}-modda`);
+  }
+  addQuery(cleaned);
+  if (/konstitutsiya/i.test(original) || articleNumber) addQuery("O'zbekiston Respublikasi Konstitutsiyasi");
+
+  // Konstitutsiya uchun to'g'ridan-to'g'ri amaldagi LexUZ hujjati:
+  // https://lex.uz/docs/-6445145
+  // Bu qidiruv sahifasi o'zgarib qolsa ham Konstitutsiya moddalarini olishga imkon beradi.
+  if (/konstitutsiya/i.test(original) && articleNumber) {
+    try {
+      const constitutionUrl = `${LEXUZ_BASE_URL}/docs/-6445145`;
+      console.log("LexUZ Konstitutsiya fallback:", constitutionUrl);
+      const html = await lexUzFetch(constitutionUrl);
+      const text = lexUzHtmlToText(html);
+      const article = extractLexUzArticle(text, articleNumber);
+      if (article) {
+        return {
+          answer: `📘 OʻZBEKISTON RESPUBLIKASI KONSTITUTSIYASI\n\n${article}\n\nManba: O‘zbekiston Respublikasi Qonunchilik ma’lumotlari milliy bazasi (LexUZ)`,
+          source: "lexuz",
+          title: "OʻZBEKISTON RESPUBLIKASI KONSTITUTSIYASI",
+          url: constitutionUrl,
+          article: articleNumber
+        };
+      }
+    } catch (e) {
+      console.error("LEXUZ CONSTITUTION FALLBACK ERROR:", e.message);
+    }
   }
 
-  for (const q of queries) {
-    const results = await lexUzSearchRaw(q);
-    if (!results.length) continue;
+  const candidates = [];
+  const seen = new Set();
 
-    const best = chooseLexUzSearchResult(results, q);
-    if (!best) continue;
+  for (const query of queries.slice(0, 6)) {
+    for (const searchParam of ["searchtitle", "searchtext"]) {
+      try {
+        const url = `${LEXUZ_BASE_URL}/uz/search/all?lang=4&${searchParam}=${encodeURIComponent(query)}`;
+        console.log(`LexUZ qidiruvi [${searchParam}]:`, query);
+        const html = await lexUzFetch(url);
+        for (const item of parseLexUzSearchResults(html)) {
+          if (!seen.has(item.url)) {
+            seen.add(item.url);
+            candidates.push(item);
+          }
+        }
+      } catch (e) {
+        console.error(`LEXUZ SEARCH ERROR [${searchParam}]:`, e.message);
+      }
+    }
+  }
 
-    return await fetchLexUzDocument(best, q);
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => scoreLexUzResult(cleaned || original, b) - scoreLexUzResult(cleaned || original, a));
+
+  for (const candidate of candidates.slice(0, 8)) {
+    try {
+      const html = await lexUzFetch(candidate.url);
+      const text = lexUzHtmlToText(html);
+      if (!text) continue;
+
+      const article = extractLexUzArticle(text, articleNumber);
+      const title = candidate.title || "LexUZ hujjati";
+
+      return {
+        answer: articleNumber
+          ? `📘 ${title}\n\n${article || `LexUZdan ${articleNumber}-modda bo‘yicha tegishli hujjat topildi.`}\n\nManba: O‘zbekiston Respublikasi Qonunchilik ma’lumotlari milliy bazasi (LexUZ)`
+          : `📘 ${title}\n\n${text.slice(0, 5000)}\n\nManba: O‘zbekiston Respublikasi Qonunchilik ma’lumotlari milliy bazasi (LexUZ)`,
+        source: "lexuz",
+        title,
+        url: candidate.url,
+        article: articleNumber || null
+      };
+    } catch (e) {
+      console.error("LEXUZ DOCUMENT ERROR:", candidate.url, e.message);
+    }
   }
 
   return null;
 }
 
 // ============================================================
-// END WIKIDATA + LEX.UZ
+// END LEXUZ
 // ============================================================
 
 // ============================================================
@@ -1296,7 +1216,7 @@ async function askGemini(userText,history,knowledge){const key=process.env.GEMIN
 // ============================================================
 // HEALTH / AUTH
 // ============================================================
-app.get('/api/health',async(req,res)=>{try{await db('SELECT 1');res.json({ok:true,database:'connected',gemini:Boolean(process.env.GEMINI_API_KEY),translator:true,weather:true,currency:true,wikidata:true,lexuz:true,model:process.env.GEMINI_MODEL||'gemini-2.5-flash'});}catch(e){res.status(500).json({ok:false,database:'error',error:e.message});}});
+app.get('/api/health',async(req,res)=>{try{await db('SELECT 1');res.json({ok:true,database:'connected',gemini:Boolean(process.env.GEMINI_API_KEY),translator:true,weather:true,currency:true,lexuz:true,wikipedia:true,wikidata:true,model:process.env.GEMINI_MODEL||'gemini-2.5-flash'});}catch(e){res.status(500).json({ok:false,database:'error',error:e.message});}});
 async function register(req,res){try{const{username,email='',password}=req.body||{},un=String(username||'').trim();if(un.length<3||String(password||'').length<6)return res.status(400).json({error:"Login kamida 3, parol kamida 6 belgidan iborat bo'lsin"});const rows=await db(`INSERT INTO users (username,email,password_hash) VALUES ($1,$2,$3) RETURNING id,username,email,birth_date,city,avatar,is_admin,created_at,last_seen`,[un,String(email).trim(),hashPassword(password)]);res.status(201).json({success:true,user:safeUser(rows[0]),token:String(rows[0].id)});}catch(e){if(e.code==='23505')return res.status(409).json({error:'Bu login allaqachon mavjud'});console.error('REGISTER ERROR:',e);res.status(500).json({error:"Ro'yxatdan o'tishda server xatosi"});}}
 async function login(req,res){try{const{username,password}=req.body||{},rows=await db(`SELECT id,username,email,birth_date,city,avatar,is_admin,created_at,last_seen FROM users WHERE LOWER(username)=LOWER($1) AND password_hash=$2 LIMIT 1`,[String(username||'').trim(),hashPassword(password||'')]);if(!rows.length)return res.status(401).json({error:"Login yoki parol noto'g'ri"});await db(`UPDATE users SET last_seen=NOW() WHERE id=$1`,[rows[0].id]);res.json({success:true,user:safeUser(rows[0]),token:String(rows[0].id)});}catch(e){console.error('LOGIN ERROR:',e);res.status(500).json({error:'Kirishda server xatosi'});}}
 app.post('/api/auth/register',register);app.post('/api/register',register);app.post('/api/auth/login',login);app.post('/api/login',login);app.get('/api/me',requireUser,async(req,res)=>res.json({success:true,user:safeUser(req.user)}));
@@ -1391,22 +1311,59 @@ app.post('/api/chat',requireUser,async(req,res)=>{
     const translationRequest=findTranslationIntent(text);
     if(translationRequest){try{const translated=await tryTranslate(text);if(translated){const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,translated.translated]);return res.json({success:true,answer:translated.translated,source:'translator',matched_knowledge:[],translation:{source_text:translated.sourceText,target_language:translated.targetCode,detected_source_language:translated.detectedSource||null},message:saved[0]});}}catch(e){console.error('TRANSLATOR ERROR:',e.message);const fallback=e.message||'Tarjima xizmati hozircha javob bermadi.';const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,`Tarjima xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring.`]);return res.json({success:true,answer:saved[0].text,source:'translator_error',error:fallback,matched_knowledge:[],message:saved[0]});}}
     const matches=await findKnowledge(text,8),trusted=chooseKnowledgeAnswer(matches);let answer=null,source='unknown';if(trusted){answer=String(trusted.answer||'').trim();source='qamir_knowledge';}
+    // ========================================================
+    // 4. LEXUZ — RASMIY O'ZBEKISTON QONUNCHILIGI
+    if (!answer) {
+      try {
+        const lex = await searchLexUz(text);
+        if (lex) {
+          answer = lex.answer;
+          source = 'lexuz';
+        }
+      } catch (e) {
+        console.error('LEXUZ ERROR:', e.message);
+      }
+    }
 
-    // ========================================================
-    // 3. LEX.UZ
-    // ========================================================
-    if(!answer){try{const lex=await searchLexUz(text);if(lex&&lex.answer){answer=lex.answer;source='lexuz';}}catch(e){console.error('LEXUZ ERROR:',e);}}
-
-    // ========================================================
-    // 4. WIKIDATA
-    // ========================================================
-    if(!answer){try{const wd=await searchWikidata(text);if(wd&&wd.answer){answer=wd.answer;source='wikidata';}}catch(e){console.error('WIKIDATA ERROR:',e);}}
-
-    // ========================================================
     // 5. WIKIPEDIA
-    // ========================================================
-    if(!answer){try{const wiki=await searchWikipedia(text);if(wiki){const wikiText=[wiki.description,wiki.extract].filter(Boolean).join('\n\n').trim();if(wikiText){answer=`${wiki.title}\n\n${wikiText}`;source='wikipedia';}}}catch(e){console.error('WIKIPEDIA ERROR:',e);}}
-    if(!answer){const usefulContext=matches.filter(x=>x.score>=75).slice(0,4);try{answer=await askGemini(text,history,usefulContext);if(answer)source='gemini_assist';}catch(e){console.error('GEMINI ERROR:',e.message);}}
+    if (!answer) {
+      try {
+        const wiki = await searchWikipedia(text);
+        if (wiki) {
+          const wikiText = [wiki.description, wiki.extract].filter(Boolean).join('\\n\\n').trim();
+          if (wikiText) {
+            answer = `${wiki.title}\\n\\n${wikiText}`;
+            source = 'wikipedia';
+          }
+        }
+      } catch (e) {
+        console.error('WIKIPEDIA ERROR:', e);
+      }
+    }
+
+    // 6. WIKIDATA — FAQAT ISHONCHLI MOSLIK BO'LSA
+    if (!answer) {
+      try {
+        const wikidata = await searchWikidata(text);
+        if (wikidata) {
+          answer = wikidata.answer;
+          source = 'wikidata';
+        }
+      } catch (e) {
+        console.error('WIKIDATA ERROR:', e);
+      }
+    }
+
+    // 7. GEMINI
+    if (!answer) {
+      const usefulContext = matches.filter(x => x.score >= 75).slice(0, 4);
+      try {
+        answer = await askGemini(text, history, usefulContext);
+        if (answer) source = 'gemini_assist';
+      } catch (e) {
+        console.error('GEMINI ERROR:', e.message);
+      }
+    }
     if(!answer){answer='Bu savol bo‘yicha Qamir AI bilim bazasida hozircha yetarli ma’lumot yo‘q.';source='no_knowledge';}
     const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,answer]);res.json({success:true,answer,source,matched_knowledge:matches.slice(0,3).map(x=>({id:x.id,title:x.title,question:x.question,score:x.score})),message:saved[0]});
   }catch(e){console.error('CHAT ERROR:',e);res.status(500).json({error:'Chat server xatosi'});}
@@ -1423,6 +1380,6 @@ app.post('/api/admin/improve/:id/reject',requireAdmin,async(req,res)=>{await db(
 
 app.use(express.static(__dirname));
 initDb().then(()=>{app.listen(PORT,'0.0.0.0',()=>{console.log(`Qamir AI server running on port ${PORT}`);console.log('PostgreSQL: connected');console.log(`Gemini API key: ${process.env.GEMINI_API_KEY?'configured':'NOT configured'}`);console.log(`Gemini model: ${process.env.GEMINI_MODEL||'gemini-2.5-flash'}`);console.log('Advanced calculator: enabled');console.log('Translator: Google public + LibreTranslate fallback enabled');console.log('Translator API key: not required');console.log('Uzbekistan date/time: enabled');console.log('Wikipedia search: enabled');console.log('Weather: Open-Meteo enabled (API key not required)');
-    console.log('Currency: CBU Uzbekistan official JSON enabled (API key not required)');console.log('LexUZ: official legislation search enabled');console.log('Wikidata: strict entity matching enabled');console.log('Knowledge search: strict matching enabled');});}).catch(error=>{console.error('DATABASE INIT ERROR:',error);process.exit(1);});
+    console.log('Currency: CBU Uzbekistan official JSON enabled (API key not required)');console.log('LexUZ: official legal search enabled (public pages)');console.log('Wikipedia: Uzbek + English + Russian fallback enabled');console.log('Knowledge search: strict matching enabled');});}).catch(error=>{console.error('DATABASE INIT ERROR:',error);process.exit(1);});
 process.on('SIGTERM',async()=>{await pool.end();process.exit(0);});
 process.on('SIGINT',async()=>{await pool.end();process.exit(0);});
