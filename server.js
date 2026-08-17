@@ -1137,6 +1137,523 @@ async function searchLexUz(userText) {
 // END LEXUZ
 // ============================================================
 
+
+// ============================================================
+// LUG‘AT — API KEY TALAB QILMAYDI
+// Uzbek/Russian/English so‘zlar uchun Wiktionary,
+// imkon bo‘lsa Dictionary API fallback.
+// ============================================================
+
+const DICTIONARY_API_BASE = "https://api.dictionaryapi.dev/api/v2/entries";
+
+function normalizeDictionaryText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[ʻ’‘`´]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeDictionaryQuestion(text) {
+  const q = normalizeDictionaryText(text);
+  if (!q || q.length < 2) return false;
+
+  return [
+    /\bnima\s+degani\b/i,
+    /\bma['’]?nosi\b/i,
+    /\bma['’]?nosi\s+nima\b/i,
+    /\bmanosi\b/i,
+    /\bta['’]?rif\b/i,
+    /\bta['’]?rifi\b/i,
+    /\bizohi\b/i,
+    /\blug['’]?at\b/i,
+    /\blugat\b/i,
+    /\bdefinition\b/i,
+    /\bmeaning\s+of\b/i,
+    /\bwhat\s+does\b/i,
+    /\bчто\s+значит\b/i,
+    /\bзначение\b/i,
+    /\bчто\s+такое\b/i,
+    /\bso['’]?zning\s+ma['’]?nosi\b/i,
+    /\bsozning\s+manosi\b/i
+  ].some(pattern => pattern.test(q));
+}
+
+function cleanDictionaryQuery(text) {
+  let q = String(text || "").trim();
+
+  q = q
+    .replace(/[?!.]+$/g, "")
+    .replace(/^\s*(?:lug['’]?at|luga)t?\s*[:,-]?\s*/iu, "")
+    .replace(/^(?:what\s+does|meaning\s+of|definition\s+of|what\s+is)\s+/iu, "")
+    .replace(/^(?:что\s+значит|что\s+такое|значение)\s+/iu, "")
+    .replace(/\s+(?:nima\s+degani|nima\s+degan|ma['’]?nosi\s+nima|manosi\s+nima|ma['’]?nosi|manosi|ta['’]?rifi|tarifi|izohi)\s*$/iu, "")
+    .replace(/\s+(?:degani|degan)\s*$/iu, "")
+    .replace(/^\s*(?:shu\s+so['’]?z|shu\s+soz)\s*/iu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return q.slice(0, 160);
+}
+
+function dictionaryLanguageCandidates(word) {
+  const w = normalizeDictionaryText(word);
+  const latin = /[a-z]/i.test(w);
+  const cyrillic = /[а-яё]/i.test(w);
+
+  if (cyrillic && !latin) return ["ru", "en", "uz"];
+  if (latin) return ["en", "ru", "uz"];
+  return ["uz", "en", "ru"];
+}
+
+async function dictionaryApiLookup(language, word) {
+  const url = `${DICTIONARY_API_BASE}/${encodeURIComponent(language)}/${encodeURIComponent(word)}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "QamirAI/1.0"
+    },
+    signal: AbortSignal.timeout(10000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Dictionary API HTTP ${response.status}`);
+  }
+
+  const data = await response.json().catch(() => null);
+  if (!Array.isArray(data) || !data.length) {
+    throw new Error("Dictionary API bo‘sh javob qaytardi.");
+  }
+
+  const entries = [];
+
+  for (const item of data) {
+    const wordValue = String(item?.word || word).trim();
+
+    for (const meaning of item?.meanings || []) {
+      const part = String(meaning?.partOfSpeech || "").trim();
+      for (const definition of meaning?.definitions || []) {
+        const textValue = String(definition?.definition || "").trim();
+        if (!textValue) continue;
+        entries.push({
+          word: wordValue,
+          partOfSpeech: part,
+          definition: textValue,
+          example: String(definition?.example || "").trim()
+        });
+        if (entries.length >= 6) break;
+      }
+      if (entries.length >= 6) break;
+    }
+    if (entries.length >= 6) break;
+  }
+
+  return entries;
+}
+
+function extractWiktionaryText(html) {
+  return String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/p>|<\/div>|<\/li>|<\/dd>|<\/dt>|<\/h[1-6]>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&#039;/gi, "'")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+async function wiktionaryLookup(language, word) {
+  const base = `https://${language}.wiktionary.org/w/api.php`;
+  const params = new URLSearchParams({
+    action: "query",
+    prop: "extracts",
+    explaintext: "1",
+    exintro: "1",
+    redirects: "1",
+    titles: word,
+    format: "json",
+    formatversion: "2",
+    origin: "*"
+  });
+
+  const response = await fetch(`${base}?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "QamirAI/1.0 (Qamir AI personal assistant)"
+    },
+    signal: AbortSignal.timeout(10000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Wiktionary ${language} HTTP ${response.status}`);
+  }
+
+  const data = await response.json().catch(() => ({}));
+  const page = Array.isArray(data?.query?.pages) ? data.query.pages[0] : null;
+  if (!page || page.missing) return null;
+
+  const extract = extractWiktionaryText(page.extract || "");
+  if (!extract) return null;
+
+  return {
+    title: String(page.title || word).trim(),
+    extract
+  };
+}
+
+async function getDictionaryAnswer(text) {
+  if (!looksLikeDictionaryQuestion(text)) return null;
+
+  const word = cleanDictionaryQuery(text);
+  if (!word || word.length < 2) return null;
+
+  const languageCandidates = dictionaryLanguageCandidates(word);
+
+  // 1) Wiktionary — ko‘p tilli, API key kerak emas.
+  for (const language of languageCandidates) {
+    try {
+      const page = await wiktionaryLookup(language, word);
+      if (page) {
+        const cleaned = page.extract
+          .replace(/^(?:[A-Z][^\n]{0,80}\n){0,2}/, "")
+          .trim();
+
+        const clipped = cleaned.length > 2200
+          ? `${cleaned.slice(0, 2200).trim()}…`
+          : cleaned;
+
+        return {
+          answer: `📖 ${page.title}\n\n${clipped}\n\nManba: Wiktionary`,
+          source: "dictionary_wiktionary",
+          word: page.title,
+          language
+        };
+      }
+    } catch (e) {
+      console.error(`DICTIONARY WIKTIONARY ${language.toUpperCase()} ERROR:`, e.message);
+    }
+  }
+
+  // 2) Free Dictionary API — API key talab qilmaydi.
+  for (const language of languageCandidates) {
+    if (language === "uz") continue;
+    try {
+      const entries = await dictionaryApiLookup(language, word);
+      if (!entries.length) continue;
+
+      const lines = [`📖 ${entries[0].word}`];
+      for (const item of entries.slice(0, 5)) {
+        const prefix = item.partOfSpeech ? `${item.partOfSpeech}: ` : "";
+        lines.push(`• ${prefix}${item.definition}`);
+        if (item.example) lines.push(`  Misol: ${item.example}`);
+      }
+      lines.push("", `Manba: Free Dictionary API (${language.toUpperCase()})`);
+
+      return {
+        answer: lines.join("\n"),
+        source: "dictionary_api",
+        word: entries[0].word,
+        language
+      };
+    } catch (e) {
+      console.error(`DICTIONARY API ${language.toUpperCase()} ERROR:`, e.message);
+    }
+  }
+
+  // 3) Faqat lug‘at buyrug‘i uchun Gemini yordamchi fallback.
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const fallback = await askGemini(
+        `Quyidagi so‘z yoki iboraning lug‘aviy ma’nosini qisqa va aniq o‘zbek tilida tushuntir: ${word}`,
+        [],
+        []
+      );
+
+      if (fallback) {
+        return {
+          answer: `📖 ${word}\n\n${fallback}\n\nManba: Qamir AI lug‘at yordamchisi`,
+          source: "dictionary_gemini",
+          word
+        };
+      }
+    } catch (e) {
+      console.error("DICTIONARY GEMINI FALLBACK ERROR:", e.message);
+    }
+  }
+
+  return {
+    answer: `“${word}” so‘zi bo‘yicha lug‘at ma’lumoti topilmadi.`,
+    source: "dictionary_not_found",
+    word
+  };
+}
+
+// ============================================================
+// END LUG‘AT
+// ============================================================
+
+// ============================================================
+// AQLLI QIDIRUV — API KEY TALAB QILMAYDI
+// DuckDuckGo Instant Answer + HTML natijalar fallback.
+// Faqat aniq qidiruv buyrug‘i bo‘lsa ishga tushadi.
+// ============================================================
+
+const DUCKDUCKGO_INSTANT_URL = "https://api.duckduckgo.com/";
+const DUCKDUCKGO_HTML_URL = "https://html.duckduckgo.com/html/";
+
+function normalizeSmartSearchText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[ʻ’‘`´]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeSmartSearchQuestion(text) {
+  const q = normalizeSmartSearchText(text);
+  if (!q || q.length < 3) return false;
+
+  return [
+    /\binternetdan\s+qidir\b/i,
+    /\binternetda\s+qidir\b/i,
+    /\binternetdan\s+top\b/i,
+    /\bwebdan\s+qidir\b/i,
+    /\bwebda\s+qidir\b/i,
+    /\bqidirib\s+ber\b/i,
+    /\btopib\s+ber\b/i,
+    /\bma['’]lumot\s+izla\b/i,
+    /\bmalumot\s+izla\b/i,
+    /\beng\s+so‘nggi\s+ma['’]lumot\b/i,
+    /\beng\s+songgi\s+malumot\b/i,
+    /\byangiliklarni\s+top\b/i,
+    /\byangiliklar\s+haqida\s+qidir\b/i,
+    /\bsearch\s+(?:for|on)\b/i,
+    /\bgoogle(?:da|dan)?\s+qidir\b/i,
+    /\binternet\s+qidiruvi\b/i,
+    /\baqlli\s+qidiruv\b/i
+  ].some(pattern => pattern.test(q));
+}
+
+function cleanSmartSearchQuery(text) {
+  let q = String(text || "").trim();
+
+  q = q
+    .replace(/[?!.]+$/g, "")
+    .replace(/^\s*(?:internetdan|internetda|webdan|webda|google(?:da|dan)?)\s*/iu, "")
+    .replace(/^(?:qidirib\s+ber|qidir|topib\s+ber|top|search\s+(?:for|on))\s*:?-?\s*/iu, "")
+    .replace(/^(?:ma['’]lumot\s+izla|malumot\s+izla|internet\s+qidiruvi|aqlli\s+qidiruv)\s*:?-?\s*/iu, "")
+    .replace(/^(?:shu\s+haqida|shu\s+mavzuda)\s*/iu, "")
+    .replace(/\b(?:internetdan|internetda|webdan|webda)\s+qidir\b/iu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return q.slice(0, 300);
+}
+
+function decodeHtmlEntities(text) {
+  return String(text || "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&#039;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&nbsp;/gi, " ");
+}
+
+function stripHtml(text) {
+  return decodeHtmlEntities(
+    String(text || "")
+      .replace(/<br\s*\/?\s*>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+  ).trim();
+}
+
+async function smartSearchInstant(query) {
+  const url = `${DUCKDUCKGO_INSTANT_URL}?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1&no_redirect=1&kl=us-en`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "QamirAI/1.0 (Qamir AI personal assistant)"
+    },
+    signal: AbortSignal.timeout(10000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`DuckDuckGo Instant HTTP ${response.status}`);
+  }
+
+  const data = await response.json().catch(() => ({}));
+  const results = [];
+
+  if (data?.AbstractText || data?.AbstractURL) {
+    results.push({
+      title: String(data?.Heading || query).trim(),
+      snippet: String(data?.AbstractText || data?.Answer || "").trim(),
+      url: String(data?.AbstractURL || "").trim()
+    });
+  }
+
+  const topics = [];
+  const collectTopics = list => {
+    for (const item of Array.isArray(list) ? list : []) {
+      if (Array.isArray(item?.Topics)) {
+        collectTopics(item.Topics);
+        continue;
+      }
+      const text = String(item?.Text || "").trim();
+      const firstUrl = String(item?.FirstURL || "").trim();
+      if (text || firstUrl) {
+        topics.push({
+          title: text.split(" - ")[0] || query,
+          snippet: text,
+          url: firstUrl
+        });
+      }
+    }
+  };
+
+  collectTopics(data?.RelatedTopics);
+  for (const item of topics.slice(0, 5)) results.push(item);
+
+  return results.filter(item => item.title || item.snippet || item.url).slice(0, 6);
+}
+
+async function smartSearchHtml(query) {
+  const url = `${DUCKDUCKGO_HTML_URL}?q=${encodeURIComponent(query)}&kl=us-en&kp=-2`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "uz,ru;q=0.8,en;q=0.7",
+      "User-Agent": "Mozilla/5.0 (compatible; QamirAI/1.0)"
+    },
+    signal: AbortSignal.timeout(12000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`DuckDuckGo HTML HTTP ${response.status}`);
+  }
+
+  const html = await response.text();
+  const results = [];
+  const seen = new Set();
+
+  const blockRe = /<div[^>]+class="result"[\s\S]*?<\/div>\s*<\/div>/gi;
+  const hrefRe = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i;
+  const snippetRe = /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>|<div[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/div>/i;
+
+  const blocks = html.match(blockRe) || [];
+
+  for (const block of blocks) {
+    const link = block.match(hrefRe);
+    if (!link) continue;
+
+    let urlValue = decodeHtmlEntities(link[1]);
+    const title = stripHtml(link[2]);
+
+    // DuckDuckGo ba’zan /l/?uddg=... ko‘rinishidagi redirect beradi.
+    try {
+      const parsed = new URL(urlValue, DUCKDUCKGO_HTML_URL);
+      const uddg = parsed.searchParams.get("uddg");
+      if (uddg) urlValue = decodeURIComponent(uddg);
+    } catch {}
+
+    const snippetMatch = block.match(snippetRe);
+    const snippet = stripHtml(snippetMatch ? (snippetMatch[1] || snippetMatch[2] || "") : "");
+
+    if (!urlValue || !title) continue;
+    if (/^(javascript:|mailto:)/i.test(urlValue)) continue;
+    if (seen.has(urlValue)) continue;
+
+    seen.add(urlValue);
+    results.push({ title, snippet, url: urlValue });
+    if (results.length >= 6) break;
+  }
+
+  return results;
+}
+
+async function getSmartSearchAnswer(text) {
+  if (!looksLikeSmartSearchQuestion(text)) return null;
+
+  const query = cleanSmartSearchQuery(text);
+  if (!query || query.length < 2) {
+    return {
+      answer: "Nimani internetdan qidirish kerakligini yozing.",
+      source: "smart_search_error"
+    };
+  }
+
+  let results = [];
+
+  try {
+    results = await smartSearchInstant(query);
+  } catch (e) {
+    console.error("SMART SEARCH INSTANT ERROR:", e.message);
+  }
+
+  if (results.length < 2) {
+    try {
+      const htmlResults = await smartSearchHtml(query);
+      const seen = new Set(results.map(item => item.url).filter(Boolean));
+      for (const item of htmlResults) {
+        if (item.url && seen.has(item.url)) continue;
+        if (item.url) seen.add(item.url);
+        results.push(item);
+        if (results.length >= 6) break;
+      }
+    } catch (e) {
+      console.error("SMART SEARCH HTML ERROR:", e.message);
+    }
+  }
+
+  if (!results.length) {
+    return {
+      answer: `“${query}” bo‘yicha internet qidiruvida hozircha natija topilmadi.`,
+      source: "smart_search_empty",
+      query
+    };
+  }
+
+  const lines = [`🔎 Aqlli qidiruv: ${query}`, ""];
+
+  results.slice(0, 5).forEach((item, index) => {
+    lines.push(`${index + 1}. ${item.title}`);
+    if (item.snippet) lines.push(`   ${item.snippet}`);
+    if (item.url) lines.push(`   ${item.url}`);
+    lines.push("");
+  });
+
+  lines.push("Manba: DuckDuckGo qidiruvi");
+
+  return {
+    answer: lines.join("\n").trim(),
+    source: "smart_search",
+    query,
+    results: results.slice(0, 5)
+  };
+}
+
+// ============================================================
+// END AQLLI QIDIRUV
+// ============================================================
+
 // ============================================================
 // ADVANCED CALCULATOR
 // ============================================================
@@ -1308,6 +1825,36 @@ app.post('/api/chat',requireUser,async(req,res)=>{
     }
 
     const calc=tryCalculate(text);if(calc){const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,calc.answer]);return res.json({success:true,answer:calc.answer,source:'calculator',matched_knowledge:[],calculation:{expression:calc.expression,result:calc.result},message:saved[0]});}
+    // ========================================================
+    // 3. LUG‘AT
+    // ========================================================
+
+    if (looksLikeDictionaryQuestion(text)) {
+      try {
+        const dictionary = await getDictionaryAnswer(text);
+        if (dictionary) {
+          const saved = await db(
+            `INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,
+            [req.user.id, dictionary.answer]
+          );
+
+          return res.json({
+            success: true,
+            answer: dictionary.answer,
+            source: dictionary.source,
+            matched_knowledge: [],
+            dictionary: {
+              word: dictionary.word || null,
+              language: dictionary.language || null
+            },
+            message: saved[0]
+          });
+        }
+      } catch (e) {
+        console.error('DICTIONARY ERROR:', e.message);
+      }
+    }
+
     const translationRequest=findTranslationIntent(text);
     if(translationRequest){try{const translated=await tryTranslate(text);if(translated){const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,translated.translated]);return res.json({success:true,answer:translated.translated,source:'translator',matched_knowledge:[],translation:{source_text:translated.sourceText,target_language:translated.targetCode,detected_source_language:translated.detectedSource||null},message:saved[0]});}}catch(e){console.error('TRANSLATOR ERROR:',e.message);const fallback=e.message||'Tarjima xizmati hozircha javob bermadi.';const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,`Tarjima xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring.`]);return res.json({success:true,answer:saved[0].text,source:'translator_error',error:fallback,matched_knowledge:[],message:saved[0]});}}
     const matches=await findKnowledge(text,8),trusted=chooseKnowledgeAnswer(matches);let answer=null,source='unknown';if(trusted){answer=String(trusted.answer||'').trim();source='qamir_knowledge';}
@@ -1354,6 +1901,22 @@ app.post('/api/chat',requireUser,async(req,res)=>{
       }
     }
 
+    // ========================================================
+    // 8. AQLLI QIDIRUV
+    // ========================================================
+
+    if (!answer && looksLikeSmartSearchQuestion(text)) {
+      try {
+        const search = await getSmartSearchAnswer(text);
+        if (search) {
+          answer = search.answer;
+          source = search.source;
+        }
+      } catch (e) {
+        console.error('SMART SEARCH ERROR:', e.message);
+      }
+    }
+
     // 7. GEMINI
     if (!answer) {
       const usefulContext = matches.filter(x => x.score >= 75).slice(0, 4);
@@ -1380,6 +1943,6 @@ app.post('/api/admin/improve/:id/reject',requireAdmin,async(req,res)=>{await db(
 
 app.use(express.static(__dirname));
 initDb().then(()=>{app.listen(PORT,'0.0.0.0',()=>{console.log(`Qamir AI server running on port ${PORT}`);console.log('PostgreSQL: connected');console.log(`Gemini API key: ${process.env.GEMINI_API_KEY?'configured':'NOT configured'}`);console.log(`Gemini model: ${process.env.GEMINI_MODEL||'gemini-2.5-flash'}`);console.log('Advanced calculator: enabled');console.log('Translator: Google public + LibreTranslate fallback enabled');console.log('Translator API key: not required');console.log('Uzbekistan date/time: enabled');console.log('Wikipedia search: enabled');console.log('Weather: Open-Meteo enabled (API key not required)');
-    console.log('Currency: CBU Uzbekistan official JSON enabled (API key not required)');console.log('LexUZ: official legal search enabled (public pages)');console.log('Wikipedia: Uzbek + English + Russian fallback enabled');console.log('Knowledge search: strict matching enabled');});}).catch(error=>{console.error('DATABASE INIT ERROR:',error);process.exit(1);});
+    console.log('Currency: CBU Uzbekistan official JSON enabled (API key not required)');console.log('LexUZ: official legal search enabled (public pages)');console.log('Wikipedia: Uzbek + English + Russian fallback enabled');console.log('Dictionary: Wiktionary + Free Dictionary API enabled (API key not required)');console.log('Smart search: DuckDuckGo Instant + HTML fallback enabled (API key not required)');console.log('Knowledge search: strict matching enabled');});}).catch(error=>{console.error('DATABASE INIT ERROR:',error);process.exit(1);});
 process.on('SIGTERM',async()=>{await pool.end();process.exit(0);});
 process.on('SIGINT',async()=>{await pool.end();process.exit(0);});
