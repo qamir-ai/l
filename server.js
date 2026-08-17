@@ -1000,8 +1000,6 @@ async function searchWikidata(userText) {
     lines.push(`Boshqa nomlari: ${aliases.slice(0, 5).join(", ")}`);
   }
 
-  lines.push(`Wikidata ID: ${entity.id}`);
-  lines.push("Manba: Wikidata");
 
   return {
     answer: lines.join("\n"),
