@@ -1217,6 +1217,7 @@ function cleanWikipediaHtml(
     .trim();
 }
 
+// TUZATILGAN WIKIPEDIA SCORE
 function scoreWikipediaTitle(
   query,
   title
@@ -1259,49 +1260,61 @@ function scoreWikipediaTitle(
         best =
           Math.max(
             best,
-            100
+            120
           );
-      } else if (
-        qw.startsWith(tw) ||
-        tw.startsWith(qw)
+
+        continue;
+      }
+
+      if (
+        qw.length >= 4 &&
+        tw.length >= 4 &&
+        (
+          qw.startsWith(tw) ||
+          tw.startsWith(qw)
+        )
       ) {
         best =
           Math.max(
             best,
-            72
-          );
-      } else {
-        const distance =
-          levenshtein(
-            qw,
-            tw
+            95
           );
 
-        if (
-          distance === 1
-        ) {
-          best =
-            Math.max(
-              best,
-              65
-            );
-        } else if (
-          distance === 2
-        ) {
-          best =
-            Math.max(
-              best,
-              48
-            );
-        } else if (
-          distance === 3
-        ) {
-          best =
-            Math.max(
-              best,
-              25
-            );
-        }
+        continue;
+      }
+
+      const distance =
+        levenshtein(
+          qw,
+          tw
+        );
+
+      if (
+        distance === 1
+      ) {
+        best =
+          Math.max(
+            best,
+            90
+          );
+      } else if (
+        distance === 2
+      ) {
+        best =
+          Math.max(
+            best,
+            70
+          );
+      } else if (
+        distance === 3 &&
+        qw.length >= 6 &&
+        tw.length >= 6
+      ) {
+        best =
+          Math.max(
+            best,
+            50
+          );
       }
     }
 
@@ -1321,13 +1334,20 @@ function scoreWikipediaTitle(
     );
 
   score +=
-    coverage * 80;
+    coverage * 100;
 
   if (
     normalize(title) ===
     normalize(query)
   ) {
-    score += 250;
+    score += 300;
+  }
+
+  if (
+    qWords.length >= 2 &&
+    matched >= 2
+  ) {
+    score += 70;
   }
 
   return score;
@@ -1533,6 +1553,7 @@ async function wikipediaGetPage(
   };
 }
 
+// TUZATILGAN VARIANT QIDIRUVI
 function makeWikipediaVariants(
   query,
   suggestion = ""
@@ -1568,30 +1589,30 @@ function makeWikipediaVariants(
   add(query);
   add(suggestion);
 
-  const wordsList =
+  const words =
     tokenizeRaw(query)
       .filter(
         w => w.length >= 3
       );
 
   if (
-    wordsList.length > 1
+    words.length > 1
   ) {
     add(
-      wordsList.join(" ")
+      words.join(" ")
     );
   }
 
   for (
     const word
-    of wordsList
+    of words
   ) {
     add(word);
   }
 
   return variants.slice(
     0,
-    8
+    12
   );
 }
 
@@ -1653,7 +1674,7 @@ async function fetchWikipediaFromLanguage(
         const variant
         of variants.slice(
           0,
-          5
+          6
         )
       ) {
         if (
@@ -1746,17 +1767,21 @@ async function fetchWikipediaFromLanguage(
       if (
         score > bestScore
       ) {
-        bestScore = score;
-        bestPage = candidate;
+        bestScore =
+          score;
+
+        bestPage =
+          candidate;
       }
     }
 
+    // TUZATILDI: xato yozilgan ismga ruxsat
     if (
       !bestPage ||
-      bestScore < 70
+      bestScore < 85
     ) {
       console.log(
-        `Wikipedia [${language}]: mos keluvchi sahifa topilmadi. Eng yaxshi score=${bestScore}`
+        `Wikipedia [${language}]: mos sahifa topilmadi. Eng yaxshi score=${bestScore}`
       );
 
       return null;
@@ -4268,6 +4293,11 @@ function removeTranslationCommand(
   return value;
 }
 
+// ============================================================
+// MUHIM TUZATISH:
+// TRANSLATOR FAQAT BUYRUQ BO'LSA ISHLAYDI
+// ============================================================
+
 function findTranslationIntent(
   text
 ) {
@@ -4284,26 +4314,31 @@ function findTranslationIntent(
       original
     );
 
+  // Faqat aniq tarjima buyrug'i bo'lsa translator ishga tushadi.
+  //
+  // Ishlaydi:
+  // "perevot ruschaga salom"
+  // "perevod inglizchaga hello"
+  // "ruschaga tarjima qil: salom"
+  // "translate to english: salom"
+  //
+  // Ishlamaydi:
+  // "men ruscha bilaman"
+  // "inglizcha gaplashamiz"
+  // "ruscha matn"
+  //
   const hasCommand =
-    /(?:tarjima|tarjma|o'gir|ogir|perevod|perevot|perewot|translate|перевод|переведи)/iu
+    /(?:tarjima|tarjma|o'gir|ogir|o'girish|ogirish|perevod|perevot|perewot|translate|перевод|переведи)/iu
       .test(q);
+
+  if (!hasCommand) {
+    return null;
+  }
 
   const targetCode =
     extractTranslationTarget(
       original
     );
-
-  const hasTarget =
-    Boolean(
-      targetCode
-    );
-
-  if (
-    !hasCommand &&
-    !hasTarget
-  ) {
-    return null;
-  }
 
   if (!targetCode) {
     return {
@@ -4312,7 +4347,7 @@ function findTranslationIntent(
       sourceText:
         "",
       error:
-        "Tarjima tilini aniqlab bo‘lmadi."
+        "Qaysi tilga tarjima qilish kerakligi aniqlanmadi."
     };
   }
 
@@ -4370,12 +4405,15 @@ async function translateWithGooglePublic(
       {
         method:
           "GET",
+
         headers: {
           "Accept":
             "application/json",
+
           "User-Agent":
             "QamirAI/1.0"
         },
+
         signal:
           AbortSignal.timeout(
             15000
@@ -4399,7 +4437,8 @@ async function translateWithGooglePublic(
   }
 
   const data =
-    await response.json()
+    await response
+      .json()
       .catch(
         () => null
       );
@@ -4447,6 +4486,7 @@ async function translateWithGooglePublic(
   return {
     text:
       translated,
+
     detectedSource:
       typeof data[2] ===
       "string"
@@ -4489,25 +4529,33 @@ async function translateWithLibreTranslate(
           {
             method:
               "POST",
+
             headers: {
               "Content-Type":
                 "application/json",
+
               "Accept":
                 "application/json",
+
               "User-Agent":
                 "QamirAI/1.0"
             },
+
             body:
               JSON.stringify({
                 q:
                   sourceText,
+
                 source:
                   "auto",
+
                 target:
                   targetCode,
+
                 format:
                   "text"
               }),
+
             signal:
               AbortSignal.timeout(
                 15000
@@ -4549,6 +4597,7 @@ async function translateWithLibreTranslate(
         return {
           text:
             translated.trim(),
+
           detectedSource:
             data?.detectedLanguage
               ?.language ||
@@ -4559,6 +4608,7 @@ async function translateWithLibreTranslate(
 
       lastError =
         "LibreTranslate javobida translatedText topilmadi.";
+
     } catch (e) {
       lastError =
         e?.message ||
@@ -4615,13 +4665,17 @@ async function tryTranslate(
     return {
       sourceText:
         intent.sourceText,
+
       targetCode:
         intent.targetCode,
+
       translated:
         result.text,
+
       detectedSource:
         result.detectedSource
     };
+
   } catch (e) {
     googleError =
       e?.message ||
@@ -4643,13 +4697,17 @@ async function tryTranslate(
     return {
       sourceText:
         intent.sourceText,
+
       targetCode:
         intent.targetCode,
+
       translated:
         result.text,
+
       detectedSource:
         result.detectedSource
     };
+
   } catch (e) {
     const libreError =
       e?.message ||
@@ -4768,6 +4826,7 @@ ${context || "(Mos bilim topilmadi.)"}
             "assistant"
               ? "model"
               : "user",
+
           parts: [
             {
               text:
@@ -4782,6 +4841,7 @@ ${context || "(Mos bilim topilmadi.)"}
   contents.push({
     role:
       "user",
+
     parts: [
       {
         text:
@@ -4798,10 +4858,12 @@ ${context || "(Mos bilim topilmadi.)"}
       {
         method:
           "POST",
+
         headers: {
           "Content-Type":
             "application/json"
         },
+
         body:
           JSON.stringify({
             systemInstruction: {
@@ -4812,7 +4874,9 @@ ${context || "(Mos bilim topilmadi.)"}
                 }
               ]
             },
+
             contents,
+
             generationConfig: {
               temperature:
                 Math.max(
@@ -4825,6 +4889,7 @@ ${context || "(Mos bilim topilmadi.)"}
                     )
                   )
                 ),
+
               maxOutputTokens:
                 Math.max(
                   64,
@@ -4907,6 +4972,7 @@ app.get(
             .GEMINI_MODEL ||
           "gemini-2.5-flash"
       });
+
     } catch (e) {
       res.status(500).json({
         ok:
@@ -4961,11 +5027,14 @@ async function register(
          RETURNING id, username, email, birth_date,
                    city, avatar, is_admin,
                    created_at, last_seen`,
+
         [
           un,
+
           String(
             email
           ).trim(),
+
           hashPassword(
             password
           )
@@ -4988,6 +5057,7 @@ async function register(
             rows[0].id
           )
       });
+
   } catch (e) {
     if (
       e.code ===
@@ -5035,10 +5105,12 @@ async function login(
          WHERE LOWER(username) = LOWER($1)
            AND password_hash = $2
          LIMIT 1`,
+
         [
           String(
             username || ""
           ).trim(),
+
           hashPassword(
             password || ""
           )
@@ -5060,6 +5132,7 @@ async function login(
       `UPDATE users
        SET last_seen = NOW()
        WHERE id = $1`,
+
       [
         rows[0].id
       ]
@@ -5079,6 +5152,7 @@ async function login(
           rows[0].id
         )
     });
+
   } catch (e) {
     console.error(
       "LOGIN ERROR:",
@@ -5124,6 +5198,7 @@ app.get(
     res.json({
       success:
         true,
+
       user:
         safeUser(
           req.user
@@ -5158,9 +5233,11 @@ app.get(
       res.json({
         success:
           true,
+
         knowledge:
           rows
       });
+
     } catch (e) {
       console.error(
         "KNOWLEDGE GET ERROR:",
@@ -5253,9 +5330,11 @@ app.post(
         .json({
           success:
             true,
+
           knowledge:
             rows[0]
         });
+
     } catch (e) {
       console.error(
         "KNOWLEDGE ADD ERROR:",
@@ -5322,6 +5401,7 @@ app.delete(
         success:
           true
       });
+
     } catch (e) {
       console.error(
         "KNOWLEDGE DELETE ERROR:",
@@ -5358,6 +5438,7 @@ app.delete(
         message:
           "Barcha bilimlar o‘chirildi"
       });
+
     } catch (e) {
       console.error(
         "KNOWLEDGE DELETE ALL ERROR:",
@@ -5394,6 +5475,7 @@ app.get(
     res.json({
       success:
         true,
+
       knowledge:
         rows
     });
@@ -5417,6 +5499,7 @@ app.get(
     res.json({
       success:
         true,
+
       settings:
         s
     });
@@ -5515,6 +5598,7 @@ app.put(
         success:
           true
       });
+
     } catch (e) {
       console.error(
         "SETTINGS ERROR:",
@@ -5600,6 +5684,7 @@ app.put(
             req.user.id
           ]
         );
+
       } else {
         await db(
           `
@@ -5665,6 +5750,7 @@ app.put(
             rows[0]
           )
       });
+
     } catch (e) {
       console.error(
         "PROFILE ERROR:",
@@ -5701,7 +5787,7 @@ app.get(
         WHERE user_id = $1
         ORDER BY created_at ASC
         LIMIT 300
-      `,
+        `,
         [
           req.user.id
         ]
@@ -5710,6 +5796,7 @@ app.get(
     res.json({
       success:
         true,
+
       messages:
         rows
     });
@@ -5748,7 +5835,7 @@ app.post(
           WHERE user_id = $1
           ORDER BY created_at DESC
           LIMIT 40
-        `,
+          `,
           [
             req.user.id
           ]
@@ -5798,7 +5885,7 @@ app.post(
             RETURNING
               id, sender, text,
               created_at
-          `,
+            `,
             [
               req.user.id,
               dateTimeAnswer.answer
@@ -5843,7 +5930,7 @@ app.post(
             RETURNING
               id, sender, text,
               created_at
-          `,
+            `,
             [
               req.user.id,
               calc.answer
@@ -5907,7 +5994,7 @@ app.post(
                 RETURNING
                   id, sender, text,
                   created_at
-              `,
+                `,
                 [
                   req.user.id,
                   translated.translated
@@ -5943,6 +6030,7 @@ app.post(
                 saved[0]
             });
           }
+
         } catch (e) {
           console.error(
             "TRANSLATOR ERROR:",
@@ -5959,7 +6047,7 @@ app.post(
               RETURNING
                 id, sender, text,
                 created_at
-            `,
+              `,
               [
                 req.user.id,
                 "Tarjima xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring."
@@ -6079,6 +6167,7 @@ app.post(
               );
             }
           }
+
         } catch (e) {
           console.error(
             "WIKIPEDIA ERROR:",
@@ -6115,6 +6204,7 @@ app.post(
             source =
               "gemini_assist";
           }
+
         } catch (e) {
           console.error(
             "GEMINI ERROR:",
@@ -6145,7 +6235,7 @@ app.post(
           RETURNING
             id, sender, text,
             created_at
-        `,
+          `,
           [
             req.user.id,
             answer
@@ -6170,10 +6260,13 @@ app.post(
               x => ({
                 id:
                   x.id,
+
                 title:
                   x.title,
+
                 question:
                   x.question,
+
                 score:
                   x.score
               })
@@ -6569,3 +6662,4 @@ process.on(
     process.exit(0);
   }
 );
+```
