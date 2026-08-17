@@ -56,6 +56,7 @@
       <div class="side-bottom">
         <button id="profileBtn" class="side-btn">◉ <span>Profil</span></button>
         <button id="settingsBtn" class="side-btn admin-only">⚙ <span>Agent sozlamalari</span></button>
+        <button id="unansweredBtn" class="side-btn admin-only">🧠 <span>Javobsiz savollar</span></button>
         <button id="logoutBtn" class="side-btn danger">↪ <span>Chiqish</span></button>
       </div>
     </aside>
@@ -119,6 +120,24 @@
   <div id="mobileOverlay" class="mobile-overlay hidden"></div>
   <script src="config.js"></script>
   <script src="app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const btn = document.getElementById("unansweredBtn");
+      const settingsBtn = document.getElementById("settingsBtn");
+      if (!btn || !settingsBtn) return;
+
+      btn.addEventListener("click", async () => {
+        if (document.body.classList.contains("is-admin") === false) {
+          return;
+        }
+        settingsBtn.click();
+        setTimeout(() => {
+          const improveTab = document.querySelector('.tab[data-tab="improve"]');
+          if (improveTab) improveTab.click();
+        }, 150);
+      });
+    });
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>
   (() => {
