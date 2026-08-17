@@ -129,6 +129,7 @@ function cleanWikipediaQuery(text) {
 function looksLikeWikipediaQuestion(text) {
   const q = normalize(text);
   if (!q || q.length < 2) return false;
+  if (typeof looksLikeSmartSearchQuestion === "function" && looksLikeSmartSearchQuestion(q)) return false;
   if (looksLikeWeatherQuestion(q) || looksLikeCurrencyQuestion(q) || looksLikeLexUzQuestion(q)) return false;
 
   const explicit = [
@@ -801,6 +802,7 @@ function normalizeWikidataText(text) {
 function looksLikeWikidataQuestion(text) {
   const q = normalizeWikidataText(text);
   if (!q || q.length < 2) return false;
+  if (typeof looksLikeSmartSearchQuestion === "function" && looksLikeSmartSearchQuestion(q)) return false;
   if (looksLikeLexUzQuestion(q) || looksLikeWeatherQuestion(q) || looksLikeCurrencyQuestion(q)) return false;
   return [
     /\bkim\b/i,/\bkimdir\b/i,/\bhaqida\b/i,/\bbiografiya\b/i,
@@ -910,6 +912,7 @@ function normalizeLexUzText(text) {
 function looksLikeLexUzQuestion(text) {
   const q = normalizeLexUzText(text);
   if (!q) return false;
+  if (typeof looksLikeSmartSearchQuestion === "function" && looksLikeSmartSearchQuestion(q)) return false;
   return [
     /\bmodda\b/i,/\bmoddasiga\b/i,/\bmoddasida\b/i,
     /\bkonstitutsiya\b/i,/\bkodeks\b/i,/\bqonun\b/i,/\bqonunchilik\b/i,
@@ -1180,18 +1183,38 @@ function looksLikeDictionaryQuestion(text) {
 }
 
 function cleanDictionaryQuery(text) {
-  let q = String(text || "").trim();
-
-  q = q
+  let q = normalizeDictionaryText(text)
+    .replace(/[“”«»]/g, '"')
     .replace(/[?!.]+$/g, "")
-    .replace(/^\s*(?:lug['’]?at|luga)t?\s*[:,-]?\s*/iu, "")
-    .replace(/^(?:what\s+does|meaning\s+of|definition\s+of|what\s+is)\s+/iu, "")
-    .replace(/^(?:что\s+значит|что\s+такое|значение)\s+/iu, "")
-    .replace(/\s+(?:nima\s+degani|nima\s+degan|ma['’]?nosi\s+nima|manosi\s+nima|ma['’]?nosi|manosi|ta['’]?rifi|tarifi|izohi)\s*$/iu, "")
-    .replace(/\s+(?:degani|degan)\s*$/iu, "")
-    .replace(/^\s*(?:shu\s+so['’]?z|shu\s+soz)\s*/iu, "")
     .replace(/\s+/g, " ")
     .trim();
+
+  q = q
+    .replace(/^\s*(?:lug['’]?atdan|lugatdan|lug['’]?at|lugat)\s*[:,-]?\s*/iu, "")
+    .replace(/^\s*(?:dictionary|dict)\s*[:,-]?\s*/iu, "")
+    .replace(/^\s*(?:shu\s+so['’]?z|shu\s+soz)\s*/iu, "")
+    .trim();
+
+  const quoted = q.match(/^["']\s*([^"']{2,100})\s*["']/u);
+  if (quoted) q = quoted[1].trim();
+
+  q = q
+    .replace(/^(?:what\s+does|meaning\s+of|definition\s+of|what\s+is)\s+/iu, "")
+    .replace(/^(?:что\s+значит|что\s+такое|значение)\s+/iu, "")
+    .trim();
+
+  // "kompyuter so‘zining ma’nosi nima" -> "kompyuter"
+  const marker = q.match(/\s+(?:so['’]?z(?:ining|ning|ini|ni|i)?|soz(?:ining|ning|ini|ni|i)?|ma['’]?nosi|manosi|nima\s+degani|nima\s+degan|ta['’]?rifi|tarifi|izohi|definition)\b[\s\S]*$/iu);
+  if (marker && marker.index > 0) q = q.slice(0, marker.index).trim();
+
+  q = q
+    .replace(/\s+(?:topib\s+ber|qidirib\s+ber|qidir|top|izla|ber)\s*$/iu, "")
+    .replace(/["']/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const words = q.split(/\s+/).filter(Boolean);
+  if (words.length > 4) q = words.slice(0, 4).join(" ");
 
   return q.slice(0, 160);
 }
@@ -1201,8 +1224,8 @@ function dictionaryLanguageCandidates(word) {
   const latin = /[a-z]/i.test(w);
   const cyrillic = /[а-яё]/i.test(w);
 
-  if (cyrillic && !latin) return ["ru", "en", "uz"];
-  if (latin) return ["en", "ru", "uz"];
+  if (cyrillic && !latin) return ["ru", "uz", "en"];
+  if (latin) return ["uz", "en", "ru"];
   return ["uz", "en", "ru"];
 }
 
@@ -1425,37 +1448,34 @@ function looksLikeSmartSearchQuestion(text) {
   const q = normalizeSmartSearchText(text);
   if (!q || q.length < 3) return false;
 
-  return [
-    /\binternetdan\s+qidir\b/i,
-    /\binternetda\s+qidir\b/i,
-    /\binternetdan\s+top\b/i,
-    /\bwebdan\s+qidir\b/i,
-    /\bwebda\s+qidir\b/i,
+  const patterns = [
+    /\binternet(?:dan|da)?\b[\s\S]{0,120}\b(?:qidir|top|izla|yangilik|ma['’]?lumot)\b/i,
+    /\bweb(?:dan|da)?\b[\s\S]{0,120}\b(?:qidir|top|izla|yangilik|ma['’]?lumot)\b/i,
+    /\bgoogle(?:da|dan)?\b[\s\S]{0,120}\b(?:qidir|top|izla)\b/i,
     /\bqidirib\s+ber\b/i,
     /\btopib\s+ber\b/i,
-    /\bma['’]lumot\s+izla\b/i,
-    /\bmalumot\s+izla\b/i,
-    /\beng\s+so‘nggi\s+ma['’]lumot\b/i,
-    /\beng\s+songgi\s+malumot\b/i,
-    /\byangiliklarni\s+top\b/i,
-    /\byangiliklar\s+haqida\s+qidir\b/i,
+    /\b(?:qidir|top|izla)\b[\s\S]{0,120}\b(?:internet|web|google)\b/i,
+    /\byangilik(?:lar|larni)?\b[\s\S]{0,100}\b(?:qidir|top|ber|izla)\b/i,
+    /\beng\s+(?:so‘nggi|songgi|yangi)\s+ma['’]?lumot\b/i,
     /\bsearch\s+(?:for|on)\b/i,
-    /\bgoogle(?:da|dan)?\s+qidir\b/i,
     /\binternet\s+qidiruvi\b/i,
     /\baqlli\s+qidiruv\b/i
-  ].some(pattern => pattern.test(q));
+  ];
+
+  return patterns.some(pattern => pattern.test(q));
 }
 
 function cleanSmartSearchQuery(text) {
-  let q = String(text || "").trim();
-
-  q = q
+  let q = String(text || "")
+    .trim()
     .replace(/[?!.]+$/g, "")
     .replace(/^\s*(?:internetdan|internetda|webdan|webda|google(?:da|dan)?)\s*/iu, "")
-    .replace(/^(?:qidirib\s+ber|qidir|topib\s+ber|top|search\s+(?:for|on))\s*:?-?\s*/iu, "")
+    .replace(/^\s*(?:internetga|webga)\s*/iu, "")
+    .replace(/^(?:qidirib\s+ber|qidir|topib\s+ber|top|izla|search\s+(?:for|on))\s*:?-?\s*/iu, "")
     .replace(/^(?:ma['’]lumot\s+izla|malumot\s+izla|internet\s+qidiruvi|aqlli\s+qidiruv)\s*:?-?\s*/iu, "")
     .replace(/^(?:shu\s+haqida|shu\s+mavzuda)\s*/iu, "")
-    .replace(/\b(?:internetdan|internetda|webdan|webda)\s+qidir\b/iu, "")
+    .replace(/\s+(?:topib\s+ber|qidirib\s+ber|qidir|top|izla|ber)\s*$/iu, "")
+    .replace(/\b(?:internetdan|internetda|webdan|webda|google(?:da|dan)?)\s+(?:qidir|top|izla)\b/iu, "")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -1546,36 +1566,32 @@ async function smartSearchHtml(query) {
     signal: AbortSignal.timeout(12000)
   });
 
-  if (!response.ok) {
-    throw new Error(`DuckDuckGo HTML HTTP ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`DuckDuckGo HTML HTTP ${response.status}`);
 
   const html = await response.text();
   const results = [];
   const seen = new Set();
 
-  const blockRe = /<div[^>]+class="result"[\s\S]*?<\/div>\s*<\/div>/gi;
-  const hrefRe = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i;
-  const snippetRe = /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>|<div[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/div>/i;
+  const hrefRe = /<a[^>]+class=["']result__a["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  const matches = [...html.matchAll(hrefRe)];
 
-  const blocks = html.match(blockRe) || [];
+  for (let i = 0; i < matches.length && results.length < 6; i++) {
+    const match = matches[i];
+    const start = match.index || 0;
+    const nextStart = i + 1 < matches.length ? (matches[i + 1].index || html.length) : Math.min(html.length, start + 5000);
+    const segment = html.slice(start, nextStart);
 
-  for (const block of blocks) {
-    const link = block.match(hrefRe);
-    if (!link) continue;
+    let urlValue = decodeHtmlEntities(match[1]);
+    const title = stripHtml(match[2]);
 
-    let urlValue = decodeHtmlEntities(link[1]);
-    const title = stripHtml(link[2]);
-
-    // DuckDuckGo ba’zan /l/?uddg=... ko‘rinishidagi redirect beradi.
     try {
       const parsed = new URL(urlValue, DUCKDUCKGO_HTML_URL);
       const uddg = parsed.searchParams.get("uddg");
-      if (uddg) urlValue = decodeURIComponent(uddg);
+      if (uddg) urlValue = uddg;
     } catch {}
 
-    const snippetMatch = block.match(snippetRe);
-    const snippet = stripHtml(snippetMatch ? (snippetMatch[1] || snippetMatch[2] || "") : "");
+    const snippetMatch = segment.match(/<(?:a|div)[^>]+class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)<\/(?:a|div)>/i);
+    const snippet = stripHtml(snippetMatch ? snippetMatch[1] : "");
 
     if (!urlValue || !title) continue;
     if (/^(javascript:|mailto:)/i.test(urlValue)) continue;
@@ -1583,7 +1599,6 @@ async function smartSearchHtml(query) {
 
     seen.add(urlValue);
     results.push({ title, snippet, url: urlValue });
-    if (results.length >= 6) break;
   }
 
   return results;
@@ -1733,7 +1748,7 @@ async function askGemini(userText,history,knowledge){const key=process.env.GEMIN
 // ============================================================
 // HEALTH / AUTH
 // ============================================================
-app.get('/api/health',async(req,res)=>{try{await db('SELECT 1');res.json({ok:true,database:'connected',gemini:Boolean(process.env.GEMINI_API_KEY),translator:true,weather:true,currency:true,lexuz:true,wikipedia:true,wikidata:true,model:process.env.GEMINI_MODEL||'gemini-2.5-flash'});}catch(e){res.status(500).json({ok:false,database:'error',error:e.message});}});
+app.get('/api/health',async(req,res)=>{try{await db('SELECT 1');res.json({ok:true,database:'connected',gemini:Boolean(process.env.GEMINI_API_KEY),translator:true,weather:true,currency:true,lexuz:true,wikipedia:true,wikidata:true,dictionary:true,smart_search:true,model:process.env.GEMINI_MODEL||'gemini-2.5-flash'});}catch(e){res.status(500).json({ok:false,database:'error',error:e.message});}});
 async function register(req,res){try{const{username,email='',password}=req.body||{},un=String(username||'').trim();if(un.length<3||String(password||'').length<6)return res.status(400).json({error:"Login kamida 3, parol kamida 6 belgidan iborat bo'lsin"});const rows=await db(`INSERT INTO users (username,email,password_hash) VALUES ($1,$2,$3) RETURNING id,username,email,birth_date,city,avatar,is_admin,created_at,last_seen`,[un,String(email).trim(),hashPassword(password)]);res.status(201).json({success:true,user:safeUser(rows[0]),token:String(rows[0].id)});}catch(e){if(e.code==='23505')return res.status(409).json({error:'Bu login allaqachon mavjud'});console.error('REGISTER ERROR:',e);res.status(500).json({error:"Ro'yxatdan o'tishda server xatosi"});}}
 async function login(req,res){try{const{username,password}=req.body||{},rows=await db(`SELECT id,username,email,birth_date,city,avatar,is_admin,created_at,last_seen FROM users WHERE LOWER(username)=LOWER($1) AND password_hash=$2 LIMIT 1`,[String(username||'').trim(),hashPassword(password||'')]);if(!rows.length)return res.status(401).json({error:"Login yoki parol noto'g'ri"});await db(`UPDATE users SET last_seen=NOW() WHERE id=$1`,[rows[0].id]);res.json({success:true,user:safeUser(rows[0]),token:String(rows[0].id)});}catch(e){console.error('LOGIN ERROR:',e);res.status(500).json({error:'Kirishda server xatosi'});}}
 app.post('/api/auth/register',register);app.post('/api/register',register);app.post('/api/auth/login',login);app.post('/api/login',login);app.get('/api/me',requireUser,async(req,res)=>res.json({success:true,user:safeUser(req.user)}));
@@ -1857,6 +1872,37 @@ app.post('/api/chat',requireUser,async(req,res)=>{
 
     const translationRequest=findTranslationIntent(text);
     if(translationRequest){try{const translated=await tryTranslate(text);if(translated){const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,translated.translated]);return res.json({success:true,answer:translated.translated,source:'translator',matched_knowledge:[],translation:{source_text:translated.sourceText,target_language:translated.targetCode,detected_source_language:translated.detectedSource||null},message:saved[0]});}}catch(e){console.error('TRANSLATOR ERROR:',e.message);const fallback=e.message||'Tarjima xizmati hozircha javob bermadi.';const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,`Tarjima xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring.`]);return res.json({success:true,answer:saved[0].text,source:'translator_error',error:fallback,matched_knowledge:[],message:saved[0]});}}
+    // ========================================================
+    // 4. AQLLI QIDIRUV — EXPLICIT WEB BUYRUG‘I USTUVOR
+    // ========================================================
+    if (looksLikeSmartSearchQuestion(text)) {
+      try {
+        const search = await getSmartSearchAnswer(text);
+        if (search) {
+          const saved = await db(
+            `INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,
+            [req.user.id, search.answer]
+          );
+          return res.json({
+            success: true,
+            answer: search.answer,
+            source: search.source,
+            matched_knowledge: [],
+            query: search.query || cleanSmartSearchQuery(text),
+            results: search.results || [],
+            message: saved[0]
+          });
+        }
+      } catch (e) {
+        console.error('SMART SEARCH ERROR:', e.message);
+        const saved = await db(
+          `INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,
+          [req.user.id, 'Internet qidiruvi hozircha ishlamadi. Iltimos, birozdan keyin yana urinib ko‘ring.']
+        );
+        return res.json({success:true,answer:saved[0].text,source:'smart_search_error',matched_knowledge:[],message:saved[0]});
+      }
+    }
+
     const matches=await findKnowledge(text,8),trusted=chooseKnowledgeAnswer(matches);let answer=null,source='unknown';if(trusted){answer=String(trusted.answer||'').trim();source='qamir_knowledge';}
     // ========================================================
     // 4. LEXUZ — RASMIY O'ZBEKISTON QONUNCHILIGI
@@ -1898,22 +1944,6 @@ app.post('/api/chat',requireUser,async(req,res)=>{
         }
       } catch (e) {
         console.error('WIKIDATA ERROR:', e);
-      }
-    }
-
-    // ========================================================
-    // 8. AQLLI QIDIRUV
-    // ========================================================
-
-    if (!answer && looksLikeSmartSearchQuestion(text)) {
-      try {
-        const search = await getSmartSearchAnswer(text);
-        if (search) {
-          answer = search.answer;
-          source = search.source;
-        }
-      } catch (e) {
-        console.error('SMART SEARCH ERROR:', e.message);
       }
     }
 
