@@ -6,311 +6,2505 @@ const { Pool } = require("pg");
 const app = express();
 const PORT = Number(process.env.PORT || 10000);
 
-app.use(cors({ origin: true, methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization"] }));
+app.use(cors({
+  origin: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
 app.use(express.json({ limit: "2mb" }));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  ssl: process.env.DATABASE_URL
+    ? { rejectUnauthorized: false }
+    : false
 });
 
-async function db(sql, params = []) { const result = await pool.query(sql, params); return result.rows; }
-function hashPassword(password) { return crypto.createHash("sha256").update(String(password)).digest("hex"); }
+async function db(sql, params = []) {
+  const result = await pool.query(sql, params);
+  return result.rows;
+}
+
+function hashPassword(password) {
+  return crypto
+    .createHash("sha256")
+    .update(String(password))
+    .digest("hex");
+}
+
 function safeUser(row) {
-  return { id: row.id, username: row.username, email: row.email || "", birth_date: row.birth_date || "", city: row.city || "", avatar: row.avatar || "assets/avatar.svg", is_admin: !!row.is_admin, created_at: row.created_at, last_seen: row.last_seen };
+  return {
+    id: row.id,
+    username: row.username,
+    email: row.email || "",
+    birth_date: row.birth_date || "",
+    city: row.city || "",
+    avatar: row.avatar || "assets/avatar.svg",
+    is_admin: !!row.is_admin,
+    created_at: row.created_at,
+    last_seen: row.last_seen
+  };
 }
 
 async function initDb() {
-  await db(`CREATE TABLE IF NOT EXISTS users (id BIGSERIAL PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT DEFAULT '', password_hash TEXT NOT NULL, birth_date TEXT DEFAULT '', city TEXT DEFAULT '', avatar TEXT DEFAULT 'assets/avatar.svg', is_admin BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT NOW(), last_seen TIMESTAMPTZ DEFAULT NOW())`);
-  await db(`CREATE TABLE IF NOT EXISTS knowledge (id BIGSERIAL PRIMARY KEY, title TEXT NOT NULL DEFAULT '', question TEXT DEFAULT '', answer TEXT NOT NULL DEFAULT '', raw_text TEXT NOT NULL DEFAULT '', type TEXT DEFAULT 'general', enabled BOOLEAN DEFAULT TRUE, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())`);
-  await db(`CREATE TABLE IF NOT EXISTS messages (id BIGSERIAL PRIMARY KEY, user_id BIGINT REFERENCES users(id) ON DELETE CASCADE, sender TEXT NOT NULL CHECK (sender IN ('user','assistant')), text TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW())`);
-  await db(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY DEFAULT 1, agent_name TEXT DEFAULT 'Qamir', brand_name TEXT DEFAULT 'Qamir AI', role TEXT DEFAULT '', instruction TEXT DEFAULT '', must_rules TEXT DEFAULT '', never_rules TEXT DEFAULT '', customer_rules TEXT DEFAULT '', language TEXT DEFAULT 'O‘zbek', tone TEXT DEFAULT 'Samimiy', emoji TEXT DEFAULT 'some', answer_length TEXT DEFAULT 'O‘rtacha', greeting TEXT DEFAULT 'Salom! Men Qamir AI. Sizga qanday yordam beray?', ask_style TEXT DEFAULT '', model TEXT DEFAULT 'gemini-2.5-flash', temperature NUMERIC DEFAULT 0.7, max_tokens INTEGER DEFAULT 1024, updated_at TIMESTAMPTZ DEFAULT NOW())`);
-  await db(`CREATE TABLE IF NOT EXISTS suggestions (id BIGSERIAL PRIMARY KEY, title TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ DEFAULT NOW())`);
-  if (!(await db(`SELECT id FROM settings WHERE id = 1`)).length) await db(`INSERT INTO settings (id) VALUES (1)`);
-  const adminPassword = process.env.ADMIN_PASSWORD || "Al-qamir";
-  const adminHash = hashPassword(adminPassword);
-  const adminRows = await db(`SELECT id FROM users WHERE LOWER(username) = 'admin' LIMIT 1`);
+  console.log("Database tekshirilmoqda...");
+
+  await db(`
+    CREATE TABLE IF NOT EXISTS users (
+      id BIGSERIAL PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      email TEXT DEFAULT '',
+      password_hash TEXT NOT NULL,
+      birth_date TEXT DEFAULT '',
+      city TEXT DEFAULT '',
+      avatar TEXT DEFAULT 'assets/avatar.svg',
+      is_admin BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      last_seen TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await db(`
+    CREATE TABLE IF NOT EXISTS knowledge (
+      id BIGSERIAL PRIMARY KEY,
+      title TEXT NOT NULL DEFAULT '',
+      question TEXT DEFAULT '',
+      answer TEXT NOT NULL DEFAULT '',
+      raw_text TEXT NOT NULL DEFAULT '',
+      type TEXT DEFAULT 'general',
+      enabled BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await db(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+      sender TEXT NOT NULL CHECK (sender IN ('user','assistant')),
+      text TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await db(`
+    CREATE TABLE IF NOT EXISTS settings (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      agent_name TEXT DEFAULT 'Qamir',
+      brand_name TEXT DEFAULT 'Qamir AI',
+      role TEXT DEFAULT '',
+      instruction TEXT DEFAULT '',
+      must_rules TEXT DEFAULT '',
+      never_rules TEXT DEFAULT '',
+      customer_rules TEXT DEFAULT '',
+      language TEXT DEFAULT 'O‘zbek',
+      tone TEXT DEFAULT 'Samimiy',
+      emoji TEXT DEFAULT 'some',
+      answer_length TEXT DEFAULT 'O‘rtacha',
+      greeting TEXT DEFAULT 'Salom! Men Qamir AI. Sizga qanday yordam beray?',
+      ask_style TEXT DEFAULT '',
+      model TEXT DEFAULT 'gemini-2.5-flash',
+      temperature NUMERIC DEFAULT 0.7,
+      max_tokens INTEGER DEFAULT 1024,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await db(`
+    CREATE TABLE IF NOT EXISTS suggestions (
+      id BIGSERIAL PRIMARY KEY,
+      title TEXT NOT NULL DEFAULT '',
+      text TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  const setting = await db(
+    `SELECT id FROM settings WHERE id = 1`
+  );
+
+  if (!setting.length) {
+    await db(
+      `INSERT INTO settings (id) VALUES (1)`
+    );
+  }
+
+  const adminPassword =
+    process.env.ADMIN_PASSWORD || "Al-qamir";
+
+  const adminHash =
+    hashPassword(adminPassword);
+
+  const adminRows =
+    await db(
+      `SELECT id FROM users
+       WHERE LOWER(username) = 'admin'
+       LIMIT 1`
+    );
+
   if (!adminRows.length) {
-    await db(`INSERT INTO users (username, email, password_hash, is_admin) VALUES ('Admin', 'admin@qamir.ai', $1, TRUE)`, [adminHash]);
+    await db(
+      `INSERT INTO users
+       (username, email, password_hash, is_admin)
+       VALUES ('Admin', 'admin@qamir.ai', $1, TRUE)`,
+      [adminHash]
+    );
+
+    console.log("Admin account yaratildi.");
   } else {
-    await db(`UPDATE users SET password_hash = $1, is_admin = TRUE WHERE LOWER(username) = 'admin'`, [adminHash]);
+    await db(
+      `UPDATE users
+       SET password_hash = $1,
+           is_admin = TRUE
+       WHERE LOWER(username) = 'admin'`,
+      [adminHash]
+    );
+
+    console.log("Admin account yangilandi.");
+  }
+
+  console.log("Database tayyor.");
+}
+
+function bearer(req) {
+  const h =
+    req.headers.authorization || "";
+
+  return h.startsWith("Bearer ")
+    ? h.slice(7)
+    : "";
+}
+
+async function userFromRequest(req) {
+  const token = bearer(req);
+
+  if (!token) return null;
+
+  const id = Number(token);
+
+  if (
+    !Number.isSafeInteger(id) ||
+    id <= 0
+  ) {
+    return null;
+  }
+
+  const rows =
+    await db(
+      `SELECT id, username, email, birth_date, city, avatar,
+              is_admin, created_at, last_seen
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+  return rows[0] || null;
+}
+
+async function requireUser(req, res, next) {
+  try {
+    const user =
+      await userFromRequest(req);
+
+    if (!user) {
+      return res.status(401).json({
+        error:
+          "Kirish talab qilinadi"
+      });
+    }
+
+    req.user = user;
+    next();
+  } catch (e) {
+    console.error(
+      "AUTH ERROR:",
+      e
+    );
+
+    res.status(500).json({
+      error:
+        "Server xatosi"
+    });
   }
 }
 
-function bearer(req) { const h = req.headers.authorization || ""; return h.startsWith("Bearer ") ? h.slice(7) : ""; }
-async function userFromRequest(req) {
-  const token = bearer(req); if (!token) return null;
-  const id = Number(token); if (!Number.isSafeInteger(id) || id <= 0) return null;
-  const rows = await db(`SELECT id, username, email, birth_date, city, avatar, is_admin, created_at, last_seen FROM users WHERE id = $1 LIMIT 1`, [id]);
-  return rows[0] || null;
+async function requireAdmin(req, res, next) {
+  try {
+    const user =
+      await userFromRequest(req);
+
+    if (
+      !user ||
+      !user.is_admin
+    ) {
+      return res.status(403).json({
+        error:
+          "Faqat Admin uchun"
+      });
+    }
+
+    req.user = user;
+    next();
+  } catch (e) {
+    console.error(
+      "ADMIN ERROR:",
+      e
+    );
+
+    res.status(500).json({
+      error:
+        "Server xatosi"
+    });
+  }
 }
-async function requireUser(req, res, next) { try { const user = await userFromRequest(req); if (!user) return res.status(401).json({ error: "Kirish talab qilinadi" }); req.user = user; next(); } catch (e) { console.error("AUTH ERROR:", e); res.status(500).json({ error: "Server xatosi" }); } }
-async function requireAdmin(req, res, next) { try { const user = await userFromRequest(req); if (!user || !user.is_admin) return res.status(403).json({ error: "Faqat Admin uchun" }); req.user = user; next(); } catch (e) { console.error("ADMIN ERROR:", e); res.status(500).json({ error: "Server xatosi" }); } }
 
 // ============================================================
 // KNOWLEDGE SEARCH
 // ============================================================
-function normalize(text) { return String(text || "").toLowerCase().replace(/[ʻ’‘`´']/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim(); }
-const STOP_WORDS = new Set(["qanaqa","qanaqib","qanday","qaysi","qayer","qayerda","qayerdan","qayeriga","nima","nega","qilib","qilish","kerak","mumkin","menga","manga","man","men","siz","uchun","bilan","dan","ga","ka","qa","ni","ning","da","de","bo‘yicha","boyicha","shu","bu","bir","bor","yoq","yo‘q","ochaman","ochsam","qilaman","qilay","qilsa","qilsam","ber","berish","olish","olaman","mi","mu","edi","ekan","bo‘ladi","boladi","chi","endi"]);
-function stem(word) {
-  let w = String(word || ""); if (!w) return "";
-  const suffixes = ["laringiz","laring","ingiz","imiz","ning","dan","den","dagi","ga","ka","qa","ni","da","de","lar","lik","li","siz","man","men"];
-  for (const suffix of suffixes) if (w.length > suffix.length + 2 && w.endsWith(suffix)) { w = w.slice(0, -suffix.length); break; }
-  if (["worddan","word","vord"].includes(w)) return "word";
-  if (["eksel","excel"].includes(w)) return "excel";
-  if (["powerpoint","ppt"].includes(w)) return "powerpoint";
-  if (w === "telegram") return "telegram";
-  if (["instagram","insta"].includes(w)) return "instagram";
-  if (["telefon","tel"].includes(w)) return "telefon";
-  return w;
-}
-function tokenize(text, options = {}) { const removeStop = options.removeStop !== false; return [...new Set(normalize(text).split(/\s+/).map(stem).filter(w => w.length >= 2).filter(w => !removeStop || !STOP_WORDS.has(w)))]; }
-function tokenizeRaw(text) { return [...new Set(normalize(text).split(/\s+/).map(stem).filter(Boolean))]; }
-function phraseIncludes(text, phrase) { return ` ${normalize(text)} `.includes(` ${normalize(phrase)} `); }
-function overlapCount(queryWords, targetText) {
-  const targetWords = tokenizeRaw(targetText), set = new Set(targetWords); let count = 0;
-  for (const q of queryWords) { if (set.has(q)) { count++; continue; } if (q.length >= 4 && targetWords.some(t => t === q || t.startsWith(q) || q.startsWith(t))) count++; }
-  return count;
-}
-function extractAlternativeQuestions(rawText) { const m = String(rawText || "").match(/Muqobil\s+savollar\s*:\s*([\s\S]*?)(?=\n\s*Javob\s*:|$)/i); return m ? m[1].split(/[;|]/).map(x => x.trim()).filter(Boolean) : []; }
-function levenshtein(a, b) {
-  if (a === b) return 0; if (!a.length) return b.length; if (!b.length) return a.length; if (Math.abs(a.length - b.length) > 3) return 99;
-  const prev = Array.from({ length: b.length + 1 }, (_, i) => i), cur = new Array(b.length + 1);
-  for (let i = 1; i <= a.length; i++) { cur[0] = i; for (let j = 1; j <= b.length; j++) { const cost = a[i-1] === b[j-1] ? 0 : 1; cur[j] = Math.min(cur[j-1] + 1, prev[j] + 1, prev[j-1] + cost); } for (let j = 0; j <= b.length; j++) prev[j] = cur[j]; }
-  return prev[b.length];
-}
-function scoreKnowledge(query, item) {
-  const normalizedQuery = normalize(query), qWords = tokenize(query, { removeStop: true }); if (!normalizedQuery || !qWords.length) return 0;
-  const question = normalize(item.question || ""), title = normalize(item.title || ""), answer = normalize(item.answer || ""), rawText = normalize(item.raw_text || ""), alternatives = extractAlternativeQuestions(item.raw_text || "");
-  let score = 0; if (question && normalizedQuery === question) score += 180;
-  for (const alt of alternatives) { const altNorm = normalize(alt); if (normalizedQuery === altNorm) score += 180; else if (phraseIncludes(normalizedQuery, alt) || phraseIncludes(alt, normalizedQuery)) score += 130; }
-  const questionHits = overlapCount(qWords, question), titleHits = overlapCount(qWords, title), altHits = alternatives.reduce((best, alt) => Math.max(best, overlapCount(qWords, alt)), 0), strongestHits = Math.max(questionHits, titleHits, altHits), coverage = strongestHits / Math.max(qWords.length, 1);
-  score += questionHits * 32 + titleHits * 20 + altHits * 45;
-  if (question && (normalizedQuery.includes(question) || question.includes(normalizedQuery))) score += 110;
-  if (title && normalizedQuery.includes(title)) score += 80;
-  score += Math.min(overlapCount(qWords, answer), 2) * 2 + Math.min(overlapCount(qWords, rawText), 2);
-  for (const q of qWords) { if (q.length < 4) continue; const candidates = [question, title, ...alternatives].join(" ").split(/\s+/); if (candidates.some(c => c.length >= 4 && levenshtein(q, c) <= 1)) score += 8; }
-  if (qWords.length === 1 && strongestHits === 0) return 0; if (qWords.length >= 2 && coverage < 0.34) return 0; return Math.round(score);
-}
-async function findKnowledge(query, limit = 8) { const rows = await db(`SELECT id,title,question,answer,raw_text,type,enabled FROM knowledge WHERE enabled = TRUE ORDER BY id DESC`); return rows.map(item => ({ ...item, score: scoreKnowledge(query, item) })).filter(item => item.score >= 55).sort((a,b) => b.score - a.score).slice(0, limit); }
-function chooseKnowledgeAnswer(matches) { if (!matches.length) return null; const best = matches[0]; if (best.score >= 120) return best; if (best.score >= 90 && matches.length === 1) return best; if (best.score >= 75) { const second = matches[1]; if (!second || best.score - second.score >= 15) return best; } return null; }
 
-// ============================================================
-// DATE / TIME
-// ============================================================
-function getUzbekistanDateTime() {
-  const now = new Date();
-  const dateParts = new Intl.DateTimeFormat("uz-UZ", { timeZone: "Asia/Tashkent", year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(now);
-  const timeParts = new Intl.DateTimeFormat("uz-UZ", { timeZone: "Asia/Tashkent", hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false }).formatToParts(now);
-  const weekday = new Intl.DateTimeFormat("uz-UZ", { timeZone: "Asia/Tashkent", weekday:"long" }).format(now);
-  const part = (parts, type) => parts.find(x => x.type === type)?.value || "";
-  return { year:part(dateParts,"year"), month:part(dateParts,"month"), day:part(dateParts,"day"), hour:part(timeParts,"hour"), minute:part(timeParts,"minute"), second:part(timeParts,"second"), weekday };
-}
-function getDateTimeAnswer(text) {
-  const q = normalize(text), datePatterns = ["bugun nechi","bugun sana","bugungi sana","bugun nechanchi","sana nechi","bugun qaysi kun","bugun nima kun","bugun haftaning qaysi kuni","bugun nechanchi sana"], timePatterns = ["soat nechi","hozir soat nechi","hozirgi vaqt","vaqt nechi","hozir nechi","hozir soat"];
-  const asksDate = datePatterns.some(x => q.includes(x)), asksTime = timePatterns.some(x => q.includes(x)); if (!asksDate && !asksTime) return null; const d = getUzbekistanDateTime();
-  if (asksTime && !asksDate) return { answer:`Hozir O‘zbekiston vaqti bilan soat ${d.hour}:${d.minute}:${d.second}.`, source:"date_time" };
-  if (asksDate && asksTime) return { answer:`Bugun ${d.day}.${d.month}.${d.year}, ${d.weekday}. Hozir soat ${d.hour}:${d.minute}:${d.second}.`, source:"date_time" };
-  return { answer:`Bugun ${d.day}.${d.month}.${d.year}, ${d.weekday}.`, source:"date_time" };
-}
-
-// ============================================================
-// WIKIPEDIA — typo tolerant + rewritten-query support
-// ============================================================
-function cleanWikipediaQuery(text) {
-  return String(text || "").trim().replace(/[?!.]+$/g, "").replace(/\b(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi)\b/gi, " ").replace(/\s+/g, " ").trim();
-}
-function looksLikeWikipediaQuestion(text) {
-  const q = normalize(text); if (!q || q.length < 2) return false;
-  return [ /\bkim\b/i, /\bkimdir\b/i, /\bhaqida\b/i, /\btogrisida\b/i, /\bbiografiya\b/i, /\btarjimai holi\b/i, /\bkim yaratgan\b/i, /\bkim asos solgan\b/i, /\bkim ixtiro qilgan\b/i, /\bqachon vafot etgan\b/i, /\bqachon tugilgan\b/i, /\bqayerda tugilgan\b/i ].some(p => p.test(q));
-}
-function cleanWikipediaHtml(text) { return String(text || "").replace(/<br\s*\/?\>/gi,"\n").replace(/<span[^>]*>/gi,"").replace(/<\/span>/gi,"").replace(/<[^>]*>/g,"").replace(/&quot;/g,'"').replace(/&#039;/g,"'").replace(/&#39;/g,"'").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&#160;/g," ").replace(/\s+\n/g,"\n").replace(/\n\s+/g,"\n").replace(/[ \t]+/g," ").trim(); }
-function scoreWikipediaTitle(query, title) {
-  const qWords = tokenizeRaw(query).filter(w => w.length >= 2), tWords = tokenizeRaw(title).filter(w => w.length >= 2); if (!qWords.length || !tWords.length) return 0; let score = 0, matched = 0;
-  for (const qw of qWords) { let best = 0; for (const tw of tWords) { if (qw === tw) best = Math.max(best,100); else if (qw.startsWith(tw) || tw.startsWith(qw)) best = Math.max(best,72); else { const d = levenshtein(qw,tw); if (d===1) best=Math.max(best,65); else if(d===2) best=Math.max(best,48); else if(d===3) best=Math.max(best,25); } } if(best>0){matched++; score += best;} }
-  score += (matched / Math.max(qWords.length,1)) * 80; if(normalize(title)===normalize(query)) score += 250; return score;
-}
-async function wikipediaSearchRaw(language, query, limit = 10) {
-  const base = `https://${language}.wikipedia.org`, url = `${base}/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=0&srlimit=${Math.min(50,Math.max(1,limit))}&srinfo=suggestion|rewrittenquery|totalhits&srenablerewrites=1&srprop=snippet|titlesnippet|sectiontitle|categorysnippet&format=json&formatversion=2&origin=*`;
-  try {
-    const response = await fetch(url, { headers:{ "User-Agent":"QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)", "Api-User-Agent":"QamirAI/1.0 (Qamir AI personal assistant)" }, signal:AbortSignal.timeout(12000) });
-    if(!response.ok){ console.error(`Wikipedia ${language} HTTP ${response.status}`); return {pages:[],suggestion:"",rewrittenQuery:""}; }
-    const data = await response.json().catch(()=>({})), info = data?.query?.searchinfo || {};
-    const pages = Array.isArray(data?.query?.search) ? data.query.search.map(item => ({ title:String(item?.title||"").trim(), pageid:item?.pageid||null, snippet:cleanWikipediaHtml(item?.snippet||"") })) : [];
-    return { pages, suggestion:String(info?.suggestion||"").trim(), rewrittenQuery:String(info?.rewrittenquery||info?.rewrittenQuery||"").trim() };
-  } catch(e){ console.error(`Wikipedia ${language} SEARCH ERROR:`, e.message); return {pages:[],suggestion:"",rewrittenQuery:""}; }
-}
-async function wikipediaGetPage(language, title) {
-  const base=`https://${language}.wikipedia.org`, url=`${base}/w/api.php?action=query&prop=extracts|info&exintro=1&explaintext=1&exchars=4000&inprop=url&redirects=1&titles=${encodeURIComponent(title)}&format=json&formatversion=2&origin=*`;
-  try{
-    const response=await fetch(url,{headers:{"User-Agent":"QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)","Api-User-Agent":"QamirAI/1.0 (Qamir AI personal assistant)"},signal:AbortSignal.timeout(12000)});
-    if(!response.ok)return null; const data=await response.json().catch(()=>({})); const page=Array.isArray(data?.query?.pages)?data.query.pages[0]:null; if(!page||page.missing)return null; const extract=cleanWikipediaHtml(page.extract||""); if(!extract)return null; return {title:String(page.title||title).trim(),extract,url:String(page.fullurl||"").trim()};
-  }catch(e){console.error(`Wikipedia page ${language} ERROR:`,e.message);return null;}
-}
-function makeWikipediaVariants(query,suggestion="",rewrittenQuery="") {
-  const variants=[],seen=new Set(),add=value=>{const v=String(value||"").trim().replace(/\s+/g," "),k=normalize(v);if(v.length<2||!k||seen.has(k))return;seen.add(k);variants.push(v);};
-  add(query); add(suggestion); add(rewrittenQuery); const words=tokenizeRaw(query).filter(w=>w.length>=3); if(words.length>1)add(words.join(" ")); for(const w of words)add(w); return variants.slice(0,10);
-}
-async function fetchWikipediaFromLanguage(language, query) {
-  try {
-    const first=await wikipediaSearchRaw(language,query,15), variants=makeWikipediaVariants(query,first.suggestion,first.rewrittenQuery); let allPages=[...(first.pages||[])];
-    for(const variant of variants){if(normalize(variant)===normalize(query))continue; const r=await wikipediaSearchRaw(language,variant,15); allPages.push(...(r.pages||[]));}
-    const uniquePages=[],seen=new Set(); for(const item of allPages){const title=String(item?.title||"").trim(),key=normalize(title);if(!title||!key||seen.has(key))continue;seen.add(key);uniquePages.push(item);} if(!uniquePages.length)return null;
-    let bestPage=null,bestScore=-1; const qNorm=normalize(query),qWords=tokenizeRaw(query);
-    for(const candidate of uniquePages){const title=String(candidate?.title||"").trim(),snippet=normalize(candidate?.snippet||""); let score=scoreWikipediaTitle(query,title); for(const w of qWords) if(w.length>=4 && snippet.includes(w)) score += 18; const tn=normalize(title); if(tn===qNorm)score+=300; if(tn.includes(qNorm)||qNorm.includes(tn))score+=120; if(score>bestScore){bestScore=score;bestPage=candidate;}}
-    if(!bestPage||bestScore<65)return null; const page=await wikipediaGetPage(language,bestPage.title); if(!page)return null; return {language,title:page.title,description:"",extract:page.extract,url:page.url};
-  }catch(e){console.error(`WIKIPEDIA ${language.toUpperCase()} ERROR:`,e.message);return null;}
-}
-async function searchWikipedia(userText) { if(!looksLikeWikipediaQuestion(userText))return null; const query=cleanWikipediaQuery(userText); if(!query||query.length<2)return null; let result=await fetchWikipediaFromLanguage("uz",query); if(!result)result=await fetchWikipediaFromLanguage("en",query); return result; }
-
-
-
-// ============================================================
-// OB-HAVO - OPEN-METEO
-// API KEY TALAB QILMAYDI
-// O'ZBEKISTON SHAHARLARI UCHUN
-// ============================================================
-
-const OPEN_METEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search";
-const OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
-
-function weatherCodeUzbek(code) {
-  const map = {
-    0: "Ochiq osmon", 1: "Asosan ochiq", 2: "Qisman bulutli", 3: "Bulutli",
-    45: "Tuman", 48: "Qirovli tuman", 51: "Yengil maydalab yomg‘ir",
-    53: "O‘rtacha maydalab yomg‘ir", 55: "Kuchli maydalab yomg‘ir",
-    56: "Yengil muzli maydalab yomg‘ir", 57: "Kuchli muzli maydalab yomg‘ir",
-    61: "Yengil yomg‘ir", 63: "O‘rtacha yomg‘ir", 65: "Kuchli yomg‘ir",
-    66: "Yengil muzli yomg‘ir", 67: "Kuchli muzli yomg‘ir", 71: "Yengil qor",
-    73: "O‘rtacha qor", 75: "Kuchli qor", 77: "Qor donachalari",
-    80: "Yengil jala", 81: "O‘rtacha jala", 82: "Kuchli jala",
-    85: "Yengil qorli jala", 86: "Kuchli qorli jala", 95: "Momaqaldiroq",
-    96: "Do‘l bilan momaqaldiroq", 99: "Kuchli do‘l bilan momaqaldiroq"
-  };
-  return map[Number(code)] || "Ob-havo noma’lum";
-}
-
-function weatherWeekdayUz(dateString) {
-  try {
-    return new Intl.DateTimeFormat("uz-UZ", {
-      timeZone: "Asia/Tashkent", weekday: "long", day: "2-digit", month: "2-digit"
-    }).format(new Date(`${dateString}T12:00:00`));
-  } catch { return dateString; }
-}
-
-function looksLikeWeatherQuestion(text) {
-  const q = normalize(text);
-  if (!q || q.length < 2) return false;
-  const patterns = [
-    "ob havo", "obxavo", "havo qanday", "havo qanaqa", "harorat", "temperatura",
-    "gradus", "yomgir yogadimi", "qor yogadimi", "bugun havo", "bugungi ob havo",
-    "ertaga havo", "ertangi ob havo", "ob havoni korsat", "ob havoni ayt",
-    "ob havo malumot", "pogoda", "погода", "температура", "weather"
-  ];
-  return patterns.some(pattern => q.includes(pattern));
-}
-
-function cleanWeatherCity(text) {
+function normalize(text) {
   return String(text || "")
-    .trim()
-    .replace(/[?!.,:;]+/g, " ")
-    .replace(/\b(?:ob\s+havo|obxavo|havo|pogoda|weather|temperatura|harorat)\b/giu, " ")
-    .replace(/\b(?:bugun|bugungi|bugungi\s+kuni|ertaga|ertangi|hozir|hozirgi)\b/giu, " ")
-    .replace(/\b(?:qanday|qanaqa|nechi|necha|gradus|yogadimi|yog‘adimi)\b/giu, " ")
-    .replace(/\b(?:korsat|ko'rsat|ayt|ber|bilmoqchiman)\b/giu, " ")
+    .toLowerCase()
+    .replace(/[ʻ’‘`´']/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-async function geocodeUzbekistanCity(cityName) {
-  const city = String(cityName || "").trim();
-  if (!city) return null;
-  const url = `${OPEN_METEO_GEOCODING_URL}?name=${encodeURIComponent(city)}&count=10&language=uz&format=json&countryCode=UZ`;
-  const response = await fetch(url, {
-    method: "GET", headers: { "Accept": "application/json", "User-Agent": "QamirAI/1.0" },
-    signal: AbortSignal.timeout(10000)
-  });
-  if (!response.ok) throw new Error(`Open-Meteo geocoding HTTP ${response.status}`);
-  const data = await response.json().catch(() => ({}));
-  const results = Array.isArray(data?.results) ? data.results : [];
-  return results[0] || null;
-}
+const STOP_WORDS = new Set([
+  "qanaqa",
+  "qanaqib",
+  "qanday",
+  "qaysi",
+  "qayer",
+  "qayerda",
+  "qayerdan",
+  "qayeriga",
+  "nima",
+  "nega",
+  "qilib",
+  "qilish",
+  "kerak",
+  "mumkin",
+  "menga",
+  "manga",
+  "man",
+  "men",
+  "siz",
+  "uchun",
+  "bilan",
+  "dan",
+  "ga",
+  "ka",
+  "qa",
+  "ni",
+  "ning",
+  "da",
+  "de",
+  "bo‘yicha",
+  "boyicha",
+  "shu",
+  "bu",
+  "bir",
+  "bor",
+  "yoq",
+  "yo‘q",
+  "ochaman",
+  "ochsam",
+  "qilaman",
+  "qilay",
+  "qilsa",
+  "qilsam",
+  "ber",
+  "berish",
+  "olish",
+  "olaman",
+  "mi",
+  "mu",
+  "edi",
+  "ekan",
+  "bo‘ladi",
+  "boladi",
+  "chi",
+  "endi"
+]);
 
-async function getOpenMeteoWeather(latitude, longitude) {
-  const params = new URLSearchParams({
-    latitude: String(latitude), longitude: String(longitude),
-    current: "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,weather_code,cloud_cover,wind_speed_10m",
-    daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,rain_sum,wind_speed_10m_max,sunrise,sunset",
-    timezone: "auto", forecast_days: "3", temperature_unit: "celsius", wind_speed_unit: "kmh", precipitation_unit: "mm"
-  });
-  const response = await fetch(`${OPEN_METEO_FORECAST_URL}?${params.toString()}`, {
-    method: "GET", headers: { "Accept": "application/json", "User-Agent": "QamirAI/1.0" },
-    signal: AbortSignal.timeout(12000)
-  });
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Open-Meteo weather HTTP ${response.status}: ${body.slice(0, 300)}`);
-  }
-  const data = await response.json().catch(() => ({}));
-  if (!data?.current || !data?.daily) throw new Error("Open-Meteo ob-havo ma’lumoti kelmadi.");
-  return data;
-}
+function stem(word) {
+  let w =
+    String(word || "");
 
-async function getWeatherAnswer(text, userCity = "") {
-  if (!looksLikeWeatherQuestion(text)) return null;
-  let city = cleanWeatherCity(text).replace(/(?:da|ta|ga|ka)$/iu, "").trim();
-  if (!city) city = String(userCity || "").trim();
-  if (!city) city = "Toshkent";
+  if (!w) return "";
 
-  let location = await geocodeUzbekistanCity(city);
-  if (!location) {
-    const fallbackCity = city.replace(/\b(?:shahri|shahar|viloyati|viloyat)\b/giu, " ").replace(/\s+/g, " ").trim();
-    if (fallbackCity && fallbackCity.toLowerCase() !== city.toLowerCase()) {
-      location = await geocodeUzbekistanCity(fallbackCity);
+  const suffixes = [
+    "laringiz",
+    "laring",
+    "ingiz",
+    "imiz",
+    "ning",
+    "dan",
+    "den",
+    "dagi",
+    "ga",
+    "ka",
+    "qa",
+    "ni",
+    "da",
+    "de",
+    "lar",
+    "lik",
+    "li",
+    "siz",
+    "man",
+    "men"
+  ];
+
+  for (
+    const suffix
+    of suffixes
+  ) {
+    if (
+      w.length >
+        suffix.length + 2 &&
+      w.endsWith(suffix)
+    ) {
+      w =
+        w.slice(
+          0,
+          -suffix.length
+        );
+
+      break;
     }
   }
-  if (!location) {
+
+  if (
+    w === "worddan" ||
+    w === "word" ||
+    w === "vord"
+  ) {
+    return "word";
+  }
+
+  if (
+    w === "eksel" ||
+    w === "excel"
+  ) {
+    return "excel";
+  }
+
+  if (
+    w === "powerpoint" ||
+    w === "ppt"
+  ) {
+    return "powerpoint";
+  }
+
+  if (
+    w === "telegram"
+  ) {
+    return "telegram";
+  }
+
+  if (
+    w === "instagram" ||
+    w === "insta"
+  ) {
+    return "instagram";
+  }
+
+  if (
+    w === "telefon" ||
+    w === "tel"
+  ) {
+    return "telefon";
+  }
+
+  return w;
+}
+
+function tokenize(
+  text,
+  options = {}
+) {
+  const removeStop =
+    options.removeStop !== false;
+
+  return [
+    ...new Set(
+      normalize(text)
+        .split(/\s+/)
+        .map(stem)
+        .filter(
+          w => w.length >= 2
+        )
+        .filter(
+          w =>
+            !removeStop ||
+            !STOP_WORDS.has(w)
+        )
+    )
+  ];
+}
+
+function tokenizeRaw(text) {
+  return [
+    ...new Set(
+      normalize(text)
+        .split(/\s+/)
+        .map(stem)
+        .filter(Boolean)
+    )
+  ];
+}
+
+function phraseIncludes(
+  text,
+  phrase
+) {
+  const a =
+    ` ${normalize(text)} `;
+
+  const b =
+    ` ${normalize(phrase)} `;
+
+  return a.includes(b);
+}
+
+function overlapCount(
+  queryWords,
+  targetText
+) {
+  const targetWords =
+    tokenizeRaw(targetText);
+
+  const set =
+    new Set(targetWords);
+
+  let count = 0;
+
+  for (
+    const q
+    of queryWords
+  ) {
+    if (set.has(q)) {
+      count++;
+      continue;
+    }
+
+    if (
+      q.length >= 4 &&
+      targetWords.some(
+        t =>
+          t === q ||
+          t.startsWith(q) ||
+          q.startsWith(t)
+      )
+    ) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+function extractAlternativeQuestions(
+  rawText
+) {
+  const text =
+    String(rawText || "");
+
+  const m =
+    text.match(
+      /Muqobil\s+savollar\s*:\s*([\s\S]*?)(?=\n\s*Javob\s*:|$)/i
+    );
+
+  if (!m) return [];
+
+  return m[1]
+    .split(/[;|]/)
+    .map(
+      x => x.trim()
+    )
+    .filter(Boolean);
+}
+
+function levenshtein(
+  a,
+  b
+) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  if (
+    Math.abs(
+      a.length - b.length
+    ) > 3
+  ) {
+    return 99;
+  }
+
+  const prev =
+    new Array(
+      b.length + 1
+    );
+
+  const cur =
+    new Array(
+      b.length + 1
+    );
+
+  for (
+    let j = 0;
+    j <= b.length;
+    j++
+  ) {
+    prev[j] = j;
+  }
+
+  for (
+    let i = 1;
+    i <= a.length;
+    i++
+  ) {
+    cur[0] = i;
+
+    for (
+      let j = 1;
+      j <= b.length;
+      j++
+    ) {
+      const cost =
+        a[i - 1] === b[j - 1]
+          ? 0
+          : 1;
+
+      cur[j] =
+        Math.min(
+          cur[j - 1] + 1,
+          prev[j] + 1,
+          prev[j - 1] + cost
+        );
+    }
+
+    for (
+      let j = 0;
+      j <= b.length;
+      j++
+    ) {
+      prev[j] = cur[j];
+    }
+  }
+
+  return prev[b.length];
+}
+
+function scoreKnowledge(
+  query,
+  item
+) {
+  const normalizedQuery =
+    normalize(query);
+
+  const qWords =
+    tokenize(query, {
+      removeStop: true
+    });
+
+  if (
+    !normalizedQuery ||
+    !qWords.length
+  ) {
+    return 0;
+  }
+
+  const question =
+    normalize(
+      item.question || ""
+    );
+
+  const title =
+    normalize(
+      item.title || ""
+    );
+
+  const answer =
+    normalize(
+      item.answer || ""
+    );
+
+  const rawText =
+    normalize(
+      item.raw_text || ""
+    );
+
+  const alternatives =
+    extractAlternativeQuestions(
+      item.raw_text || ""
+    );
+
+  let score = 0;
+
+  if (
+    question &&
+    normalizedQuery === question
+  ) {
+    score += 180;
+  }
+
+  for (
+    const alt
+    of alternatives
+  ) {
+    const altNorm =
+      normalize(alt);
+
+    if (
+      normalizedQuery === altNorm
+    ) {
+      score += 180;
+    } else if (
+      phraseIncludes(
+        normalizedQuery,
+        alt
+      ) ||
+      phraseIncludes(
+        alt,
+        normalizedQuery
+      )
+    ) {
+      score += 130;
+    }
+  }
+
+  const questionHits =
+    overlapCount(
+      qWords,
+      question
+    );
+
+  const titleHits =
+    overlapCount(
+      qWords,
+      title
+    );
+
+  const altHits =
+    alternatives.reduce(
+      (best, alt) =>
+        Math.max(
+          best,
+          overlapCount(
+            qWords,
+            alt
+          )
+        ),
+      0
+    );
+
+  const strongestHits =
+    Math.max(
+      questionHits,
+      titleHits,
+      altHits
+    );
+
+  const queryCount =
+    Math.max(
+      qWords.length,
+      1
+    );
+
+  const coverage =
+    strongestHits /
+    queryCount;
+
+  score +=
+    questionHits * 32;
+
+  score +=
+    titleHits * 20;
+
+  score +=
+    altHits * 45;
+
+  if (
+    question &&
+    (
+      normalizedQuery.includes(
+        question
+      ) ||
+      question.includes(
+        normalizedQuery
+      )
+    )
+  ) {
+    score += 110;
+  }
+
+  if (
+    title &&
+    normalizedQuery.includes(
+      title
+    )
+  ) {
+    score += 80;
+  }
+
+  const answerHits =
+    overlapCount(
+      qWords,
+      answer
+    );
+
+  const rawHits =
+    overlapCount(
+      qWords,
+      rawText
+    );
+
+  score +=
+    Math.min(
+      answerHits,
+      2
+    ) * 2;
+
+  score +=
+    Math.min(
+      rawHits,
+      2
+    );
+
+  for (
+    const q
+    of qWords
+  ) {
+    if (q.length < 4) {
+      continue;
+    }
+
+    const candidates = [
+      question,
+      title,
+      ...alternatives
+    ]
+      .join(" ")
+      .split(/\s+/);
+
+    if (
+      candidates.some(
+        c =>
+          c.length >= 4 &&
+          levenshtein(
+            q,
+            c
+          ) <= 1
+      )
+    ) {
+      score += 8;
+    }
+  }
+
+  if (
+    qWords.length === 1 &&
+    strongestHits === 0
+  ) {
+    return 0;
+  }
+
+  if (
+    qWords.length >= 2 &&
+    coverage < 0.34
+  ) {
+    return 0;
+  }
+
+  return Math.round(score);
+}
+
+async function findKnowledge(
+  query,
+  limit = 8
+) {
+  const rows =
+    await db(`
+      SELECT
+        id,
+        title,
+        question,
+        answer,
+        raw_text,
+        type,
+        enabled
+      FROM knowledge
+      WHERE enabled = TRUE
+      ORDER BY id DESC
+    `);
+
+  return rows
+    .map(
+      item => ({
+        ...item,
+        score:
+          scoreKnowledge(
+            query,
+            item
+          )
+      })
+    )
+    .filter(
+      item =>
+        item.score >= 55
+    )
+    .sort(
+      (a, b) =>
+        b.score - a.score
+    )
+    .slice(
+      0,
+      limit
+    );
+}
+
+function chooseKnowledgeAnswer(
+  matches
+) {
+  if (!matches.length) {
+    return null;
+  }
+
+  const best =
+    matches[0];
+
+  if (
+    best.score >= 120
+  ) {
+    return best;
+  }
+
+  if (
+    best.score >= 90 &&
+    matches.length === 1
+  ) {
+    return best;
+  }
+
+  if (
+    best.score >= 75
+  ) {
+    const second =
+      matches[1];
+
+    if (
+      !second ||
+      best.score -
+        second.score >= 15
+    ) {
+      return best;
+    }
+  }
+
+  return null;
+}
+
+// ============================================================
+// DATE / TIME
+// ============================================================
+
+function getUzbekistanDateTime() {
+  const now =
+    new Date();
+
+  const dateParts =
+    new Intl.DateTimeFormat(
+      "uz-UZ",
+      {
+        timeZone:
+          "Asia/Tashkent",
+        year:
+          "numeric",
+        month:
+          "2-digit",
+        day:
+          "2-digit"
+      }
+    ).formatToParts(
+      now
+    );
+
+  const timeParts =
+    new Intl.DateTimeFormat(
+      "uz-UZ",
+      {
+        timeZone:
+          "Asia/Tashkent",
+        hour:
+          "2-digit",
+        minute:
+          "2-digit",
+        second:
+          "2-digit",
+        hour12:
+          false
+      }
+    ).formatToParts(
+      now
+    );
+
+  const weekday =
+    new Intl.DateTimeFormat(
+      "uz-UZ",
+      {
+        timeZone:
+          "Asia/Tashkent",
+        weekday:
+          "long"
+      }
+    ).format(now);
+
+  function part(
+    parts,
+    type
+  ) {
+    return (
+      parts.find(
+        x => x.type === type
+      )?.value || ""
+    );
+  }
+
+  return {
+    year:
+      part(
+        dateParts,
+        "year"
+      ),
+    month:
+      part(
+        dateParts,
+        "month"
+      ),
+    day:
+      part(
+        dateParts,
+        "day"
+      ),
+    hour:
+      part(
+        timeParts,
+        "hour"
+      ),
+    minute:
+      part(
+        timeParts,
+        "minute"
+      ),
+    second:
+      part(
+        timeParts,
+        "second"
+      ),
+    weekday
+  };
+}
+
+function getDateTimeAnswer(
+  text
+) {
+  const q =
+    normalize(text);
+
+  const datePatterns = [
+    "bugun nechi",
+    "bugun sana",
+    "bugungi sana",
+    "bugun nechanchi",
+    "sana nechi",
+    "bugun qaysi kun",
+    "bugun nima kun",
+    "bugun haftaning qaysi kuni",
+    "bugun nechanchi sana"
+  ];
+
+  const timePatterns = [
+    "soat nechi",
+    "hozir soat nechi",
+    "hozirgi vaqt",
+    "vaqt nechi",
+    "hozir nechi",
+    "hozir soat"
+  ];
+
+  const asksDate =
+    datePatterns.some(
+      pattern =>
+        q.includes(pattern)
+    );
+
+  const asksTime =
+    timePatterns.some(
+      pattern =>
+        q.includes(pattern)
+    );
+
+  if (
+    !asksDate &&
+    !asksTime
+  ) {
+    return null;
+  }
+
+  const d =
+    getUzbekistanDateTime();
+
+  if (
+    asksTime &&
+    !asksDate
+  ) {
     return {
-      answer: `“${city}” bo‘yicha O‘zbekistonda ob-havo ma’lumoti topilmadi. Masalan: “Toshkentda ob-havo qanday?” deb yozing.`,
-      source: "weather_error"
+      answer:
+        `Hozir O‘zbekiston vaqti bilan soat ${d.hour}:${d.minute}:${d.second}.`,
+      source:
+        "date_time"
     };
   }
 
-  const weather = await getOpenMeteoWeather(location.latitude, location.longitude);
-  const current = weather.current;
-  const daily = weather.daily;
-  const lines = [];
-
-  lines.push(`🌦 ${location.name}, ${location.country || "O‘zbekiston"}`);
-  lines.push(`Hozir: ${Number(current.temperature_2m)}°C`);
-  lines.push(`Holat: ${weatherCodeUzbek(current.weather_code)}`);
-  lines.push(`His qilinishi: ${Number(current.apparent_temperature)}°C`);
-  lines.push(`Namlik: ${Number(current.relative_humidity_2m)}%`);
-  lines.push(`Shamol: ${Number(current.wind_speed_10m)} km/soat`);
-  if (Number(current.precipitation || 0) > 0) lines.push(`Yog‘ingarchilik: ${Number(current.precipitation)} mm`);
-
-  lines.push("");
-  lines.push("📅 Keyingi 3 kun:");
-  const dailyTime = Array.isArray(daily.time) ? daily.time : [];
-  for (let i = 0; i < dailyTime.length; i++) {
-    const date = dailyTime[i];
-    const max = Number(daily.temperature_2m_max?.[i] ?? 0);
-    const min = Number(daily.temperature_2m_min?.[i] ?? 0);
-    const rainProbability = Number(daily.precipitation_probability_max?.[i] ?? 0);
-    const dailyRain = Number(daily.rain_sum?.[i] ?? 0);
-    const dailyCode = Number(daily.weather_code?.[i] ?? 0);
-    lines.push(`${weatherWeekdayUz(date)} — ${weatherCodeUzbek(dailyCode)}, ${min}°C / ${max}°C, yomg‘ir ehtimoli ${rainProbability}%`);
-    if (dailyRain > 0) lines.push(`  Yog‘in miqdori: ${dailyRain} mm`);
+  if (
+    asksDate &&
+    asksTime
+  ) {
+    return {
+      answer:
+        `Bugun ${d.day}.${d.month}.${d.year}, ${d.weekday}. Hozir soat ${d.hour}:${d.minute}:${d.second}.`,
+      source:
+        "date_time"
+    };
   }
-  lines.push("");
-  lines.push("Manba: Open-Meteo");
 
-  return { answer: lines.join("\n"), source: "weather", city: location.name, latitude: location.latitude, longitude: location.longitude };
+  return {
+    answer:
+      `Bugun ${d.day}.${d.month}.${d.year}, ${d.weekday}.`,
+    source:
+      "date_time"
+  };
 }
 
 // ============================================================
-// END OB-HAVO
+// WIKIPEDIA
 // ============================================================
+
+function cleanWikipediaQuery(
+  text
+) {
+  return String(text || "")
+    .trim()
+    .replace(
+      /[?!.]+$/g,
+      ""
+    )
+    .replace(
+      /\b(?:kim|kimdir|haqida|togrisida|to'g'risida|biografiya|tarjimai holi|who|who is|who was|кто|кто такой|кто такая|биография)\b/gi,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+}
+
+function looksLikeWikipediaQuestion(
+  text
+) {
+  const q =
+    normalize(text);
+
+  if (
+    !q ||
+    q.length < 2
+  ) {
+    return false;
+  }
+
+  const explicitPatterns = [
+    /\bkim\b/i,
+    /\bkimdir\b/i,
+    /\bhaqida\b/i,
+    /\btogrisida\b/i,
+    /\bbiografiya\b/i,
+    /\btarjimai holi\b/i,
+    /\bkim yaratgan\b/i,
+    /\bkim asos solgan\b/i,
+    /\bkim ixtiro qilgan\b/i,
+    /\bqachon vafot etgan\b/i,
+    /\bqachon tugilgan\b/i,
+    /\bqayerda tugilgan\b/i,
+
+    /\bwho\b/i,
+    /\bwho is\b/i,
+    /\bwho was\b/i,
+
+    /\bкто\b/i,
+    /\bкто такой\b/i,
+    /\bкто такая\b/i,
+    /\bбиография\b/i
+  ];
+
+  return explicitPatterns.some(
+    pattern =>
+      pattern.test(q)
+  );
+}
+
+function cleanWikipediaHtml(
+  text
+) {
+  return String(text || "")
+    .replace(
+      /<br\s*\/?>/gi,
+      "\n"
+    )
+    .replace(
+      /<span[^>]*>/gi,
+      ""
+    )
+    .replace(
+      /<\/span>/gi,
+      ""
+    )
+    .replace(
+      /<[^>]*>/g,
+      ""
+    )
+    .replace(
+      /&quot;/g,
+      '"'
+    )
+    .replace(
+      /&#039;/g,
+      "'"
+    )
+    .replace(
+      /&#39;/g,
+      "'"
+    )
+    .replace(
+      /&amp;/g,
+      "&"
+    )
+    .replace(
+      /&lt;/g,
+      "<"
+    )
+    .replace(
+      /&gt;/g,
+      ">"
+    )
+    .replace(
+      /&#160;/g,
+      " "
+    )
+    .replace(
+      /\s+\n/g,
+      "\n"
+    )
+    .replace(
+      /\n\s+/g,
+      "\n"
+    )
+    .replace(
+      /[ \t]+/g,
+      " "
+    )
+    .trim();
+}
+
+function scoreWikipediaTitle(
+  query,
+  title
+) {
+  const qWords =
+    tokenizeRaw(query)
+      .filter(
+        w => w.length >= 2
+      );
+
+  const tWords =
+    tokenizeRaw(title)
+      .filter(
+        w => w.length >= 2
+      );
+
+  if (
+    !qWords.length ||
+    !tWords.length
+  ) {
+    return 0;
+  }
+
+  let score = 0;
+  let matched = 0;
+
+  for (
+    const qw
+    of qWords
+  ) {
+    let best = 0;
+
+    for (
+      const tw
+      of tWords
+    ) {
+      if (
+        qw === tw
+      ) {
+        best =
+          Math.max(
+            best,
+            120
+          );
+        continue;
+      }
+
+      if (
+        qw.length >= 4 &&
+        tw.length >= 4 &&
+        (
+          qw.startsWith(tw) ||
+          tw.startsWith(qw)
+        )
+      ) {
+        best =
+          Math.max(
+            best,
+            95
+          );
+        continue;
+      }
+
+      const distance =
+        levenshtein(
+          qw,
+          tw
+        );
+
+      if (
+        distance === 1
+      ) {
+        best =
+          Math.max(
+            best,
+            90
+          );
+      } else if (
+        distance === 2
+      ) {
+        best =
+          Math.max(
+            best,
+            70
+          );
+      } else if (
+        distance === 3 &&
+        qw.length >= 6 &&
+        tw.length >= 6
+      ) {
+        best =
+          Math.max(
+            best,
+            50
+          );
+      }
+    }
+
+    if (
+      best > 0
+    ) {
+      matched++;
+      score += best;
+    }
+  }
+
+  const coverage =
+    matched /
+    Math.max(
+      qWords.length,
+      1
+    );
+
+  score +=
+    coverage * 100;
+
+  if (
+    normalize(title) ===
+    normalize(query)
+  ) {
+    score += 300;
+  }
+
+  if (
+    qWords.length >= 2 &&
+    matched >= 2
+  ) {
+    score += 70;
+  }
+
+  return score;
+}
+
+async function wikipediaSearchRaw(
+  language,
+  query,
+  limit = 10
+) {
+  const base =
+    `https://${language}.wikipedia.org`;
+
+  const url =
+    `${base}/w/api.php` +
+    `?action=query` +
+    `&list=search` +
+    `&srsearch=${encodeURIComponent(query)}` +
+    `&srnamespace=0` +
+    `&srlimit=${Math.min(
+      50,
+      Math.max(1, limit)
+    )}` +
+    `&srprop=snippet|titlesnippet|sectiontitle|categorysnippet` +
+    `&srinfo=suggestion|rewrittenquery|totalhits` +
+    `&srenablerewrites=1` +
+    `&format=json` +
+    `&formatversion=2` +
+    `&origin=*`;
+
+  try {
+    const response =
+      await fetch(
+        url,
+        {
+          method: "GET",
+          headers: {
+            "User-Agent":
+              "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
+            "Api-User-Agent":
+              "QamirAI/1.0 (Qamir AI personal assistant)"
+          },
+          signal:
+            AbortSignal.timeout(
+              12000
+            )
+        }
+      );
+
+    if (!response.ok) {
+      const body =
+        await response
+          .text()
+          .catch(
+            () => ""
+          );
+
+      console.error(
+        `Wikipedia ${language} HTTP ${response.status}:`,
+        body.slice(0, 300)
+      );
+
+      return {
+        pages: [],
+        suggestion: "",
+        rewrittenQuery: ""
+      };
+    }
+
+    const data =
+      await response
+        .json()
+        .catch(
+          () => ({})
+        );
+
+    const info =
+      data?.query?.searchinfo ||
+      {};
+
+    const pages =
+      Array.isArray(
+        data?.query?.search
+      )
+        ? data.query.search.map(
+            item => ({
+              title:
+                String(
+                  item?.title ||
+                  ""
+                ).trim(),
+              pageid:
+                item?.pageid ||
+                null,
+              snippet:
+                cleanWikipediaHtml(
+                  item?.snippet ||
+                  ""
+                )
+            })
+          )
+        : [];
+
+    return {
+      pages,
+      suggestion:
+        String(
+          info?.suggestion ||
+          ""
+        ).trim(),
+      rewrittenQuery:
+        String(
+          info?.rewrittenquery ||
+          info?.rewrittenQuery ||
+          ""
+        ).trim()
+    };
+  } catch (e) {
+    console.error(
+      `Wikipedia ${language} SEARCH ERROR:`,
+      e.message
+    );
+
+    return {
+      pages: [],
+      suggestion: "",
+      rewrittenQuery: ""
+    };
+  }
+}
+
+async function wikipediaGetPage(
+  language,
+  title
+) {
+  const base =
+    `https://${language}.wikipedia.org`;
+
+  const url =
+    `${base}/w/api.php` +
+    `?action=query` +
+    `&prop=extracts|info` +
+    `&exintro=1` +
+    `&explaintext=1` +
+    `&exchars=5000` +
+    `&inprop=url` +
+    `&redirects=1` +
+    `&titles=${encodeURIComponent(title)}` +
+    `&format=json` +
+    `&formatversion=2` +
+    `&origin=*`;
+
+  try {
+    const response =
+      await fetch(
+        url,
+        {
+          method: "GET",
+          headers: {
+            "User-Agent":
+              "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)",
+            "Api-User-Agent":
+              "QamirAI/1.0 (Qamir AI personal assistant)"
+          },
+          signal:
+            AbortSignal.timeout(
+              12000
+            )
+        }
+      );
+
+    if (response.ok) {
+      const data =
+        await response
+          .json()
+          .catch(
+            () => ({})
+          );
+
+      const page =
+        Array.isArray(
+          data?.query?.pages
+        )
+          ? data.query.pages[0]
+          : null;
+
+      if (
+        page &&
+        !page.missing
+      ) {
+        const extract =
+          cleanWikipediaHtml(
+            page.extract ||
+            ""
+          );
+
+        if (extract) {
+          return {
+            title:
+              String(
+                page.title ||
+                title
+              ).trim(),
+            extract,
+            url:
+              String(
+                page.fullurl ||
+                ""
+              ).trim()
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.error(
+      `Wikipedia exact page error [${language}]:`,
+      e.message
+    );
+  }
+
+  // REST summary fallback.
+  try {
+    const summaryUrl =
+      `${base}/api/rest_v1/page/summary/` +
+      encodeURIComponent(
+        String(
+          title || ""
+        ).replace(
+          / /g,
+          "_"
+        )
+      );
+
+    const summaryResponse =
+      await fetch(
+        summaryUrl,
+        {
+          method: "GET",
+          headers: {
+            "Accept":
+              "application/json",
+            "User-Agent":
+              "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)"
+          },
+          signal:
+            AbortSignal.timeout(
+              12000
+            )
+        }
+      );
+
+    if (
+      !summaryResponse.ok
+    ) {
+      return null;
+    }
+
+    const summary =
+      await summaryResponse
+        .json()
+        .catch(
+          () => ({})
+        );
+
+    const extract =
+      cleanWikipediaHtml(
+        summary?.extract ||
+        summary?.description ||
+        ""
+      );
+
+    if (!extract) {
+      return null;
+    }
+
+    return {
+      title:
+        String(
+          summary?.title ||
+          title
+        ).trim(),
+
+      extract,
+
+      url:
+        String(
+          summary?.content_urls
+            ?.desktop
+            ?.page ||
+          ""
+        ).trim()
+    };
+  } catch (e) {
+    console.error(
+      `Wikipedia REST summary error [${language}]:`,
+      e.message
+    );
+
+    return null;
+  }
+}
+
+function makeWikipediaVariants(
+  query,
+  suggestion = "",
+  rewrittenQuery = ""
+) {
+  const variants = [];
+  const seen = new Set();
+
+  function add(value) {
+    const v =
+      String(value || "")
+        .trim()
+        .replace(
+          /\s+/g,
+          " "
+        );
+
+    const key =
+      normalize(v);
+
+    if (
+      v.length < 2 ||
+      !key ||
+      seen.has(key)
+    ) {
+      return;
+    }
+
+    seen.add(key);
+    variants.push(v);
+  }
+
+  add(query);
+  add(suggestion);
+  add(rewrittenQuery);
+
+  const words =
+    tokenizeRaw(query)
+      .filter(
+        w => w.length >= 3
+      );
+
+  if (
+    words.length > 1
+  ) {
+    add(
+      words.join(" ")
+    );
+  }
+
+  for (
+    const word
+    of words
+  ) {
+    add(word);
+  }
+
+  return variants.slice(
+    0,
+    12
+  );
+}
+
+async function fetchWikipediaFromLanguage(
+  language,
+  query
+) {
+  try {
+    console.log(
+      `Wikipedia qidiruvi [${language}]:`,
+      query
+    );
+
+    const first =
+      await wikipediaSearchRaw(
+        language,
+        query,
+        15
+      );
+
+    const variants =
+      makeWikipediaVariants(
+        query,
+        first.suggestion,
+        first.rewrittenQuery
+      );
+
+    let allPages = [
+      ...(first.pages || [])
+    ];
+
+    for (
+      const variant
+      of variants
+    ) {
+      if (
+        normalize(variant) ===
+        normalize(query)
+      ) {
+        continue;
+      }
+
+      try {
+        const result =
+          await wikipediaSearchRaw(
+            language,
+            variant,
+            15
+          );
+
+        allPages.push(
+          ...(result.pages || [])
+        );
+      } catch (e) {
+        console.error(
+          "Wikipedia variant search error:",
+          e.message
+        );
+      }
+    }
+
+    const uniquePages = [];
+    const seenTitles =
+      new Set();
+
+    for (
+      const item
+      of allPages
+    ) {
+      const title =
+        String(
+          item?.title ||
+          ""
+        ).trim();
+
+      const titleKey =
+        normalize(title);
+
+      if (
+        !title ||
+        !titleKey ||
+        seenTitles.has(titleKey)
+      ) {
+        continue;
+      }
+
+      seenTitles.add(
+        titleKey
+      );
+
+      uniquePages.push(
+        item
+      );
+    }
+
+    if (
+      !uniquePages.length
+    ) {
+      return null;
+    }
+
+    let bestPage = null;
+    let bestScore = -1;
+
+    const qNorm =
+      normalize(query);
+
+    const qWords =
+      tokenizeRaw(query);
+
+    for (
+      const candidate
+      of uniquePages
+    ) {
+      const title =
+        String(
+          candidate?.title ||
+          ""
+        ).trim();
+
+      const snippet =
+        normalize(
+          candidate?.snippet ||
+          ""
+        );
+
+      let score =
+        scoreWikipediaTitle(
+          query,
+          title
+        );
+
+      for (
+        const w
+        of qWords
+      ) {
+        if (
+          w.length >= 4 &&
+          snippet.includes(w)
+        ) {
+          score += 18;
+        }
+      }
+
+      const titleNorm =
+        normalize(title);
+
+      if (
+        titleNorm === qNorm
+      ) {
+        score += 300;
+      }
+
+      if (
+        titleNorm.includes(qNorm) ||
+        qNorm.includes(titleNorm)
+      ) {
+        score += 120;
+      }
+
+      if (
+        score >
+        bestScore
+      ) {
+        bestScore =
+          score;
+
+        bestPage =
+          candidate;
+      }
+    }
+
+    if (
+      !bestPage ||
+      bestScore < 65
+    ) {
+      return null;
+    }
+
+    const page =
+      await wikipediaGetPage(
+        language,
+        bestPage.title
+      );
+
+    if (!page) {
+      return null;
+    }
+
+    console.log(
+      `Wikipedia topildi [${language}]:`,
+      page.title,
+      `score=${bestScore}`
+    );
+
+    return {
+      language,
+      title:
+        page.title,
+      description:
+        "",
+      extract:
+        page.extract,
+      url:
+        page.url
+    };
+  } catch (e) {
+    console.error(
+      `WIKIPEDIA ${language.toUpperCase()} ERROR:`,
+      e.message
+    );
+
+    return null;
+  }
+}
+
+async function searchWikipedia(
+  userText
+) {
+  if (
+    !looksLikeWikipediaQuestion(
+      userText
+    )
+  ) {
+    return null;
+  }
+
+  const query =
+    cleanWikipediaQuery(
+      userText
+    );
+
+  if (
+    !query ||
+    query.length < 2
+  ) {
+    return null;
+  }
+
+  console.log(
+    "Wikipedia yakuniy query:",
+    query
+  );
+
+  // O‘zbekcha
+  let result =
+    await fetchWikipediaFromLanguage(
+      "uz",
+      query
+    );
+
+  // Inglizcha
+  if (!result) {
+    result =
+      await fetchWikipediaFromLanguage(
+        "en",
+        query
+      );
+  }
+
+  // Ruscha
+  if (!result) {
+    result =
+      await fetchWikipediaFromLanguage(
+        "ru",
+        query
+      );
+  }
+
+  return result;
+}
+
+// ============================================================
+// OB-HAVO - OPEN-METEO
+// API KEY TALAB QILMAYDI
+// ============================================================
+
+const OPEN_METEO_GEOCODING_URL =
+  "https://geocoding-api.open-meteo.com/v1/search";
+
+const OPEN_METEO_FORECAST_URL =
+  "https://api.open-meteo.com/v1/forecast";
+
+function weatherCodeUzbek(code) {
+  const map = {
+    0: "Ochiq osmon",
+    1: "Asosan ochiq",
+    2: "Qisman bulutli",
+    3: "Bulutli",
+    45: "Tuman",
+    48: "Qirovli tuman",
+    51: "Yengil maydalab yomg‘ir",
+    53: "O‘rtacha maydalab yomg‘ir",
+    55: "Kuchli maydalab yomg‘ir",
+    56: "Yengil muzli maydalab yomg‘ir",
+    57: "Kuchli muzli maydalab yomg‘ir",
+    61: "Yengil yomg‘ir",
+    63: "O‘rtacha yomg‘ir",
+    65: "Kuchli yomg‘ir",
+    66: "Yengil muzli yomg‘ir",
+    67: "Kuchli muzli yomg‘ir",
+    71: "Yengil qor",
+    73: "O‘rtacha qor",
+    75: "Kuchli qor",
+    77: "Qor donachalari",
+    80: "Yengil jala",
+    81: "O‘rtacha jala",
+    82: "Kuchli jala",
+    85: "Yengil qorli jala",
+    86: "Kuchli qorli jala",
+    95: "Momaqaldiroq",
+    96: "Do‘l bilan momaqaldiroq",
+    99: "Kuchli do‘l bilan momaqaldiroq"
+  };
+
+  return (
+    map[
+      Number(code)
+    ] ||
+    "Ob-havo noma’lum"
+  );
+}
+
+function weatherWeekdayUz(dateString) {
+  try {
+    return new Intl.DateTimeFormat(
+      "uz-UZ",
+      {
+        timeZone:
+          "Asia/Tashkent",
+        weekday:
+          "long",
+        day:
+          "2-digit",
+        month:
+          "2-digit"
+      }
+    ).format(
+      new Date(
+        `${dateString}T12:00:00`
+      )
+    );
+  } catch {
+    return dateString;
+  }
+}
+
+function looksLikeWeatherQuestion(
+  text
+) {
+  const q =
+    normalize(text);
+
+  if (
+    !q ||
+    q.length < 2
+  ) {
+    return false;
+  }
+
+  const patterns = [
+    "ob havo",
+    "obxavo",
+    "havo qanday",
+    "havo qanaqa",
+    "harorat",
+    "temperatura",
+    "gradus",
+    "yomgir yogadimi",
+    "qor yogadimi",
+    "bugun havo",
+    "bugungi ob havo",
+    "ertaga havo",
+    "ertangi ob havo",
+    "ob havoni korsat",
+    "ob havoni ayt",
+    "ob havo malumot",
+    "pogoda",
+    "погода",
+    "температура",
+    "weather"
+  ];
+
+  return patterns.some(
+    pattern =>
+      q.includes(pattern)
+  );
+}
+
+function cleanWeatherCity(
+  text
+) {
+  return String(text || "")
+    .trim()
+    .replace(
+      /[?!.,:;]+/g,
+      " "
+    )
+    .replace(
+      /\b(?:ob\s+havo|obxavo|havo|pogoda|weather|temperatura|harorat)\b/giu,
+      " "
+    )
+    .replace(
+      /\b(?:bugun|bugungi|bugungi\s+kuni|ertaga|ertangi|hozir|hozirgi)\b/giu,
+      " "
+    )
+    .replace(
+      /\b(?:qanday|qanaqa|nechi|necha|gradus|yogadimi|yog‘adimi)\b/giu,
+      " "
+    )
+    .replace(
+      /\b(?:korsat|ko'rsat|ayt|ber|bilmoqchiman)\b/giu,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+}
+
+async function geocodeUzbekistanCity(
+  cityName
+) {
+  const city =
+    String(
+      cityName || ""
+    ).trim();
+
+  if (!city) {
+    return null;
+  }
+
+  const url =
+    `${OPEN_METEO_GEOCODING_URL}` +
+    `?name=${encodeURIComponent(city)}` +
+    `&count=10` +
+    `&language=uz` +
+    `&format=json` +
+    `&countryCode=UZ`;
+
+  const response =
+    await fetch(
+      url,
+      {
+        method: "GET",
+        headers: {
+          "Accept":
+            "application/json",
+          "User-Agent":
+            "QamirAI/1.0"
+        },
+        signal:
+          AbortSignal.timeout(
+            10000
+          )
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      `Open-Meteo geocoding HTTP ${response.status}`
+    );
+  }
+
+  const data =
+    await response
+      .json()
+      .catch(
+        () => ({})
+      );
+
+  const results =
+    Array.isArray(
+      data?.results
+    )
+      ? data.results
+      : [];
+
+  return results[0] || null;
+}
+
+async function getOpenMeteoWeather(
+  latitude,
+  longitude
+) {
+  const params =
+    new URLSearchParams({
+      latitude:
+        String(latitude),
+      longitude:
+        String(longitude),
+      current:
+        "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,weather_code,cloud_cover,wind_speed_10m",
+      daily:
+        "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,rain_sum,wind_speed_10m_max,sunrise,sunset",
+      timezone:
+        "auto",
+      forecast_days:
+        "3",
+      temperature_unit:
+        "celsius",
+      wind_speed_unit:
+        "kmh",
+      precipitation_unit:
+        "mm"
+    });
+
+  const response =
+    await fetch(
+      `${OPEN_METEO_FORECAST_URL}?${params.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          "Accept":
+            "application/json",
+          "User-Agent":
+            "QamirAI/1.0"
+        },
+        signal:
+          AbortSignal.timeout(
+            12000
+          )
+      }
+    );
+
+  if (!response.ok) {
+    const body =
+      await response
+        .text()
+        .catch(
+          () => ""
+        );
+
+    throw new Error(
+      `Open-Meteo weather HTTP ${response.status}: ${body.slice(
+        0,
+        300
+      )}`
+    );
+  }
+
+  const data =
+    await response
+      .json()
+      .catch(
+        () => ({})
+      );
+
+  if (
+    !data?.current ||
+    !data?.daily
+  ) {
+    throw new Error(
+      "Open-Meteo ob-havo ma’lumoti kelmadi."
+    );
+  }
+
+  return data;
+}
+
+async function getWeatherAnswer(
+  text,
+  userCity = ""
+) {
+  if (
+    !looksLikeWeatherQuestion(
+      text
+    )
+  ) {
+    return null;
+  }
+
+  let city =
+    cleanWeatherCity(text)
+      .replace(
+        /(?:da|ta|ga|ka)$/iu,
+        ""
+      )
+      .trim();
+
+  if (!city) {
+    city =
+      String(
+        userCity || ""
+      ).trim();
+  }
+
+  if (!city) {
+    city =
+      "Toshkent";
+  }
+
+  let location =
+    await geocodeUzbekistanCity(
+      city
+    );
+
+  if (!location) {
+    const fallbackCity =
+      city
+        .replace(
+          /\b(?:shahri|shahar|viloyati|viloyat)\b/giu,
+          " "
+        )
+        .replace(
+          /\s+/g,
+          " "
+        )
+        .trim();
+
+    if (
+      fallbackCity &&
+      fallbackCity.toLowerCase() !==
+        city.toLowerCase()
+    ) {
+      location =
+        await geocodeUzbekistanCity(
+          fallbackCity
+        );
+    }
+  }
+
+  if (!location) {
+    return {
+      answer:
+        `“${city}” bo‘yicha O‘zbekistonda ob-havo ma’lumoti topilmadi. Masalan: “Toshkentda ob-havo qanday?” deb yozing.`,
+      source:
+        "weather_error"
+    };
+  }
+
+  const weather =
+    await getOpenMeteoWeather(
+      location.latitude,
+      location.longitude
+    );
+
+  const current =
+    weather.current;
+
+  const daily =
+    weather.daily;
+
+  const lines = [];
+
+  lines.push(
+    `🌦 ${location.name}, ${
+      location.country ||
+      "O‘zbekiston"
+    }`
+  );
+
+  lines.push(
+    `Hozir: ${Number(
+      current.temperature_2m
+    )}°C`
+  );
+
+  lines.push(
+    `Holat: ${weatherCodeUzbek(
+      current.weather_code
+    )}`
+  );
+
+  lines.push(
+    `His qilinishi: ${Number(
+      current.apparent_temperature
+    )}°C`
+  );
+
+  lines.push(
+    `Namlik: ${Number(
+      current.relative_humidity_2m
+    )}%`
+  );
+
+  lines.push(
+    `Shamol: ${Number(
+      current.wind_speed_10m
+    )} km/soat`
+  );
+
+  if (
+    Number(
+      current.precipitation ||
+        0
+    ) > 0
+  ) {
+    lines.push(
+      `Yog‘ingarchilik: ${Number(
+        current.precipitation
+      )} mm`
+    );
+  }
+
+  lines.push("");
+  lines.push(
+    "📅 Keyingi 3 kun:"
+  );
+
+  const dailyTime =
+    Array.isArray(
+      daily.time
+    )
+      ? daily.time
+      : [];
+
+  for (
+    let i = 0;
+    i < dailyTime.length;
+    i++
+  ) {
+    const date =
+      dailyTime[i];
+
+    const max =
+      Number(
+        daily.temperature_2m_max?.[
+          i
+        ] ??
+        0
+      );
+
+    const min =
+      Number(
+        daily.temperature_2m_min?.[
+          i
+        ] ??
+        0
+      );
+
+    const rainProbability =
+      Number(
+        daily
+          .precipitation_probability_max?.[
+          i
+        ] ??
+        0
+      );
+
+    const dailyRain =
+      Number(
+        daily.rain_sum?.[
+          i
+        ] ??
+        0
+      );
+
+    const dailyCode =
+      Number(
+        daily.weather_code?.[
+          i
+        ] ??
+        0
+      );
+
+    lines.push(
+      `${weatherWeekdayUz(
+        date
+      )} — ${weatherCodeUzbek(
+        dailyCode
+      )}, ${min}°C / ${max}°C, yomg‘ir ehtimoli ${rainProbability}%`
+    );
+
+    if (
+      dailyRain > 0
+    ) {
+      lines.push(
+        `  Yog‘in miqdori: ${dailyRain} mm`
+      );
+    }
+  }
+
+  lines.push("");
+  lines.push(
+    "Manba: Open-Meteo"
+  );
+
+  return {
+    answer:
+      lines.join("\n"),
+    source:
+      "weather",
+    city:
+      location.name,
+    latitude:
+      location.latitude,
+    longitude:
+      location.longitude
+  };
+}
 
 // ============================================================
 // VALYUTA KURSLARI - O'ZBEKISTON MARKAZIY BANKI
@@ -322,72 +2516,191 @@ const CBU_CURRENCY_URL =
 
 const CURRENCY_ALIASES = {
   USD: [
-    "usd", "dollar", "dollor", "dolar", "dollari",
-    "aqsh dollari", "amerikan dollari", "amerika dollari"
+    "usd",
+    "dollar",
+    "dollor",
+    "dolar",
+    "dollari",
+    "aqsh dollari",
+    "amerikan dollari",
+    "amerika dollari",
+    "$"
   ],
+
   EUR: [
-    "eur", "euro", "evro", "yevرو", "evroni", "evrosi"
+    "eur",
+    "euro",
+    "evro",
+    "yevро",
+    "evroni",
+    "evrosi"
   ],
+
   RUB: [
-    "rub", "rubl", "rublь", "rubl", "rossiya rubli", "rossiya rubli"
+    "rub",
+    "rubl",
+    "rublь",
+    "rossiya rubli"
   ],
+
   GBP: [
-    "gbp", "funt", "funt sterling", "ingliz funti", "angliya funti"
+    "gbp",
+    "funt",
+    "funt sterling",
+    "ingliz funti",
+    "angliya funti"
   ],
+
   CNY: [
-    "cny", "yuan", "yuань", "xitoy yuani", "xitoy yuani"
+    "cny",
+    "yuan",
+    "yuань",
+    "xitoy yuani"
   ],
+
   JPY: [
-    "jpy", "iyena", "iena", "yapon iyenasi", "yapon ienası"
+    "jpy",
+    "iyena",
+    "iena",
+    "yapon iyenasi",
+    "yapon ienası"
   ],
+
   KZT: [
-    "kzt", "tenge", "qozog'iston tengesi", "qozogiston tengesi"
+    "kzt",
+    "tenge",
+    "qozog'iston tengesi",
+    "qozogiston tengesi"
   ],
+
   TRY: [
-    "try", "lira", "turk lirasi", "turkiya lirasi"
+    "try",
+    "lira",
+    "turk lirasi",
+    "turkiya lirasi"
   ]
 };
 
-function normalizeCurrencyText(text) {
+function normalizeCurrencyText(
+  text
+) {
   return String(text || "")
     .toLowerCase()
-    .replace(/[ʻ’‘`´]/g, "'")
-    .replace(/[?!.(),;:]/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(
+      /[ʻ’‘`´]/g,
+      "'"
+    )
+    .replace(
+      /[?!.(),;:]/g,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
     .trim();
 }
 
-function looksLikeCurrencyQuestion(text) {
-  const q = normalizeCurrencyText(text);
+function looksLikeCurrencyQuestion(
+  text
+) {
+  const q =
+    normalizeCurrencyText(text);
 
-  if (!q) return false;
+  if (!q) {
+    return false;
+  }
 
   const keywords = [
-    "valyuta", "valyutalar", "kurs", "kursi", "kurslar",
-    "dollar", "dollor", "dolar", "evro", "euro", "rubl",
-    "rublь", "funt", "yuan", "iyena", "iena", "tenge", "lira",
-    "usd", "eur", "rub", "gbp", "cny", "jpy", "kzt", "try",
-    "sum", "so'm", "som", "so'mda", "somda"
+    "valyuta",
+    "valyutalar",
+    "kurs",
+    "kursi",
+    "kurslar",
+    "dollar",
+    "dollor",
+    "dolar",
+    "evro",
+    "euro",
+    "rubl",
+    "rublь",
+    "funt",
+    "yuan",
+    "iyena",
+    "iena",
+    "tenge",
+    "lira",
+    "usd",
+    "eur",
+    "rub",
+    "gbp",
+    "cny",
+    "jpy",
+    "kzt",
+    "try",
+    "sum",
+    "so'm",
+    "som",
+    "so'mda",
+    "somda",
+    "$"
   ];
 
-  return keywords.some(keyword =>
-    q.includes(keyword)
+  return keywords.some(
+    keyword =>
+      q.includes(keyword)
   );
 }
 
-function findCurrencyCode(text) {
-  const q = normalizeCurrencyText(text);
+function findCurrencyCode(
+  text
+) {
+  const q =
+    normalizeCurrencyText(text);
 
-  const entries = Object.entries(CURRENCY_ALIASES)
-    .sort((a, b) => {
-      const maxA = Math.max(...a[1].map(x => x.length));
-      const maxB = Math.max(...b[1].map(x => x.length));
-      return maxB - maxA;
-    });
+  if (
+    q.includes("$")
+  ) {
+    return "USD";
+  }
 
-  for (const [code, aliases] of entries) {
-    for (const alias of aliases) {
-      if (q.includes(alias)) {
+  const entries =
+    Object.entries(
+      CURRENCY_ALIASES
+    ).sort(
+      (a, b) => {
+        const maxA =
+          Math.max(
+            ...a[1].map(
+              x => x.length
+            )
+          );
+
+        const maxB =
+          Math.max(
+            ...b[1].map(
+              x => x.length
+            )
+          );
+
+        return maxB - maxA;
+      }
+    );
+
+  for (
+    const [
+      code,
+      aliases
+    ]
+    of entries
+  ) {
+    for (
+      const alias
+      of aliases
+    ) {
+      if (
+        q.includes(alias)
+      ) {
         return code;
       }
     }
@@ -396,20 +2709,48 @@ function findCurrencyCode(text) {
   return null;
 }
 
-function extractCurrencyAmount(text) {
-  const q = normalizeCurrencyText(text);
+function extractCurrencyAmount(
+  text
+) {
+  const q =
+    normalizeCurrencyText(text);
 
   const patterns = [
-    /(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:ming|mingta)?\s*(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\s|$)/i,
-    /(?:\b)(\d+(?:[.,]\d+)?)(?:\s+)(?:ta\s+)?(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\b)/i,
-    /(?:\b)(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\s*)(\d+(?:[.,]\d+)?)(?:\b)/i
+    /(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:ming|mingta)?\s*(?:\$|usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\s|$)/i,
+
+    /(?:\b|\s|\$)(\d+(?:[.,]\d+)?)\s*(?:ta\s+)?(?:\$|usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)(?:\b|$)/i,
+
+    /(?:^|\s|\$)(?:usd|dollar|dollor|dolar|eur|euro|evro|rub|rubl|gbp|funt|cny|yuan|jpy|iyena|iena|kzt|tenge|try|lira)\s*(\d+(?:[.,]\d+)?)(?:\b|$)/i,
+
+    /^\s*\$?\s*(\d+(?:[.,]\d+)?)\s*\$?\s*$/i
   ];
 
-  for (const pattern of patterns) {
-    const m = q.match(pattern);
+  for (
+    const pattern
+    of patterns
+  ) {
+    const m =
+      q.match(pattern);
+
     if (m) {
-      const amount = Number(String(m[1]).replace(",", "."));
-      if (Number.isFinite(amount) && amount > 0 && amount <= 1000000000) {
+      const amount =
+        Number(
+          String(
+            m[1]
+          ).replace(
+            ",",
+            "."
+          )
+        );
+
+      if (
+        Number.isFinite(
+          amount
+        ) &&
+        amount > 0 &&
+        amount <=
+          1000000000
+      ) {
         return amount;
       }
     }
@@ -418,34 +2759,71 @@ function extractCurrencyAmount(text) {
   return null;
 }
 
-function formatCurrencyNumber(value) {
-  return Number(value).toLocaleString("uz-UZ", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-    useGrouping: true
-  });
+function formatCurrencyNumber(
+  value
+) {
+  return Number(value).toLocaleString(
+    "uz-UZ",
+    {
+      minimumFractionDigits:
+        2,
+      maximumFractionDigits:
+        2,
+      useGrouping:
+        true
+    }
+  );
 }
 
 async function getCbuCurrencies() {
-  const response = await fetch(CBU_CURRENCY_URL, {
-    method: "GET",
-    headers: {
-      "Accept": "application/json",
-      "User-Agent": "QamirAI/1.0"
-    },
-    signal: AbortSignal.timeout(12000)
-  });
+  const response =
+    await fetch(
+      CBU_CURRENCY_URL,
+      {
+        method:
+          "GET",
+        headers: {
+          "Accept":
+            "application/json",
+          "User-Agent":
+            "QamirAI/1.0"
+        },
+        signal:
+          AbortSignal.timeout(
+            12000
+          )
+      }
+    );
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
+  if (
+    !response.ok
+  ) {
+    const body =
+      await response
+        .text()
+        .catch(
+          () => ""
+        );
+
     throw new Error(
-      `CBU currency HTTP ${response.status}: ${body.slice(0, 300)}`
+      `CBU currency HTTP ${response.status}: ${body.slice(
+        0,
+        300
+      )}`
     );
   }
 
-  const data = await response.json().catch(() => null);
+  const data =
+    await response
+      .json()
+      .catch(
+        () => null
+      );
 
-  if (!Array.isArray(data) || !data.length) {
+  if (
+    !Array.isArray(data) ||
+    !data.length
+  ) {
     throw new Error(
       "Markaziy bankdan valyuta kurslari kelmadi."
     );
@@ -454,275 +2832,664 @@ async function getCbuCurrencies() {
   return data;
 }
 
-function getCurrencyRow(rows, code) {
+function getCurrencyRow(
+  rows,
+  code
+) {
   return rows.find(
     row =>
-      String(row?.Ccy || row?.ccy || "").toUpperCase() === code
+      String(
+        row?.Ccy ||
+        row?.ccy ||
+        ""
+      ).toUpperCase() ===
+      code
   ) || null;
 }
 
-function formatCurrencyRow(row) {
-  const code = String(row?.Ccy || "").toUpperCase();
-  const name = String(row?.CcyNm_UZ || row?.CcyNm_EN || code).trim();
-  const nominal = Number(row?.Nominal || 1);
-  const rate = Number(String(row?.Rate || "0").replace(",", "."));
-  const diff = Number(String(row?.Diff || "0").replace(",", "."));
+function formatCurrencyRow(
+  row
+) {
+  const code =
+    String(
+      row?.Ccy ||
+      ""
+    ).toUpperCase();
+
+  const name =
+    String(
+      row?.CcyNm_UZ ||
+      row?.CcyNm_EN ||
+      code
+    ).trim();
+
+  const nominal =
+    Number(
+      row?.Nominal ||
+      1
+    );
+
+  const rate =
+    Number(
+      String(
+        row?.Rate ||
+        "0"
+      ).replace(
+        ",",
+        "."
+      )
+    );
+
+  const diff =
+    Number(
+      String(
+        row?.Diff ||
+        "0"
+      ).replace(
+        ",",
+        "."
+      )
+    );
 
   return {
     code,
     name,
-    nominal: Number.isFinite(nominal) && nominal > 0 ? nominal : 1,
+    nominal:
+      Number.isFinite(
+        nominal
+      ) &&
+      nominal > 0
+        ? nominal
+        : 1,
     rate,
-    diff: Number.isFinite(diff) ? diff : 0,
-    date: String(row?.Date || "").trim()
+    diff:
+      Number.isFinite(
+        diff
+      )
+        ? diff
+        : 0,
+    date:
+      String(
+        row?.Date ||
+        ""
+      ).trim()
   };
 }
 
-async function getCurrencyAnswer(text) {
-  if (!looksLikeCurrencyQuestion(text)) {
+async function getCurrencyAnswer(
+  text
+) {
+  if (
+    !looksLikeCurrencyQuestion(
+      text
+    )
+  ) {
     return null;
   }
 
-  const code = findCurrencyCode(text);
-  const amount = extractCurrencyAmount(text);
-  const rows = await getCbuCurrencies();
+  const code =
+    findCurrencyCode(
+      text
+    );
 
-  const commonCodes = ["USD", "EUR", "RUB", "GBP", "CNY", "JPY", "KZT", "TRY"];
+  const amount =
+    extractCurrencyAmount(
+      text
+    );
+
+  const rows =
+    await getCbuCurrencies();
+
+  const commonCodes = [
+    "USD",
+    "EUR",
+    "RUB",
+    "GBP",
+    "CNY",
+    "JPY",
+    "KZT",
+    "TRY"
+  ];
 
   if (code) {
-    const row = getCurrencyRow(rows, code);
+    const row =
+      getCurrencyRow(
+        rows,
+        code
+      );
 
     if (!row) {
       return {
         answer:
           `${code} bo‘yicha Markaziy bank kursi hozircha topilmadi.`,
-        source: "currency_error"
+        source:
+          "currency_error"
       };
     }
 
-    const c = formatCurrencyRow(row);
+    const c =
+      formatCurrencyRow(
+        row
+      );
+
     const lines = [
       `💱 ${c.name} (${c.code})`,
-      `Kurs: ${c.nominal} ${c.code} = ${formatCurrencyNumber(c.rate)} so‘m`,
-      `O‘zgarish: ${c.diff >= 0 ? "+" : ""}${formatCurrencyNumber(c.diff)} so‘m`,
-      `Sana: ${c.date || "noma’lum"}`
+      `Kurs: ${c.nominal} ${c.code} = ${formatCurrencyNumber(
+        c.rate
+      )} so‘m`,
+      `O‘zgarish: ${
+        c.diff >= 0
+          ? "+"
+          : ""
+      }${formatCurrencyNumber(
+        c.diff
+      )} so‘m`,
+      `Sana: ${
+        c.date ||
+        "noma’lum"
+      }`
     ];
 
-    if (amount != null) {
-      const sumAmount = amount * (c.rate / c.nominal);
-      lines.push(`Hisob: ${formatCurrencyNumber(amount)} ${c.code} ≈ ${formatCurrencyNumber(sumAmount)} so‘m`);
+    if (
+      amount != null
+    ) {
+      const sumAmount =
+        amount *
+        (c.rate /
+          c.nominal);
+
+      lines.push(
+        `Hisob: ${formatCurrencyNumber(
+          amount
+        )} ${c.code} ≈ ${formatCurrencyNumber(
+          sumAmount
+        )} so‘m`
+      );
     }
 
-    lines.push("Manba: O‘zbekiston Respublikasi Markaziy banki");
+    lines.push(
+      "Manba: O‘zbekiston Respublikasi Markaziy banki"
+    );
 
     return {
-      answer: lines.join("\n"),
-      source: "currency_cbu",
-      currency: c.code,
-      amount: amount ?? null,
-      sum: amount != null ? amount * (c.rate / c.nominal) : null,
-      date: c.date
+      answer:
+        lines.join("\n"),
+      source:
+        "currency_cbu",
+      currency:
+        c.code,
+      amount:
+        amount ??
+        null,
+      sum:
+        amount != null
+          ? amount *
+            (c.rate /
+              c.nominal)
+          : null,
+      date:
+        c.date
     };
   }
 
   const selected = [];
 
-  for (const item of commonCodes) {
-    const row = getCurrencyRow(rows, item);
-    if (row) selected.push(formatCurrencyRow(row));
+  for (
+    const item
+    of commonCodes
+  ) {
+    const row =
+      getCurrencyRow(
+        rows,
+        item
+      );
+
+    if (row) {
+      selected.push(
+        formatCurrencyRow(
+          row
+        )
+      );
+    }
   }
 
-  if (!selected.length) {
+  if (
+    !selected.length
+  ) {
     return {
-      answer: "Markaziy bankdan valyuta kurslari topilmadi.",
-      source: "currency_error"
+      answer:
+        "Markaziy bankdan valyuta kurslari topilmadi.",
+      source:
+        "currency_error"
     };
   }
 
-  const date = selected.find(x => x.date)?.date || "";
+  const date =
+    selected.find(
+      x => x.date
+    )?.date ||
+    "";
+
   const lines = [
-    `💱 O‘zbekiston Respublikasi Markaziy banki valyuta kurslari${date ? ` — ${date}` : ""}`,
+    `💱 O‘zbekiston Respublikasi Markaziy banki valyuta kurslari${
+      date
+        ? ` — ${date}`
+        : ""
+    }`,
     ""
   ];
 
-  for (const c of selected) {
+  for (
+    const c
+    of selected
+  ) {
     lines.push(
-      `${c.code} — ${c.name}: ${c.nominal} ${c.code} = ${formatCurrencyNumber(c.rate)} so‘m (${c.diff >= 0 ? "+" : ""}${formatCurrencyNumber(c.diff)})`
+      `${c.code} — ${c.name}: ${c.nominal} ${c.code} = ${formatCurrencyNumber(
+        c.rate
+      )} so‘m (${
+        c.diff >= 0
+          ? "+"
+          : ""
+      }${formatCurrencyNumber(
+        c.diff
+      )})`
     );
   }
 
   lines.push("");
-  lines.push("Manba: O‘zbekiston Respublikasi Markaziy banki");
+  lines.push(
+    "Manba: O‘zbekiston Respublikasi Markaziy banki"
+  );
 
   return {
-    answer: lines.join("\n"),
-    source: "currency_cbu",
+    answer:
+      lines.join("\n"),
+    source:
+      "currency_cbu",
     date
   };
 }
 
 // ============================================================
-// END VALYUTA KURSLARI
-// ============================================================
-
-// ============================================================
-// WIKIDATA — API KEY TALAB QILMAYDI
-// O'ZBEKISTONDA ISHLAYDI
+// WIKIDATA
+// API KEY TALAB QILMAYDI
 // ============================================================
 
 const WIKIDATA_API_URL =
   "https://www.wikidata.org/w/api.php";
 
-function normalizeWikidataText(text) {
+function normalizeWikidataText(
+  text
+) {
   return String(text || "")
     .toLowerCase()
-    .replace(/[ʻ’‘`´']/g, "")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
+    .replace(
+      /[ʻ’‘`´']/g,
+      ""
+    )
+    .replace(
+      /[^\p{L}\p{N}\s]/gu,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
     .trim();
 }
 
-function looksLikeWikidataQuestion(text) {
-  const q = normalizeWikidataText(text);
+/*
+  MUHIM:
+  Wikidata endi har qanday "?" savolni ushlab olmaydi.
+  Faqat aniq strukturalangan savollar uchun ishlaydi.
+*/
+function looksLikeWikidataQuestion(
+  text
+) {
+  const q =
+    normalizeWikidataText(
+      text
+    );
 
-  if (!q || q.length < 2) {
+  if (
+    !q ||
+    q.length < 2
+  ) {
     return false;
   }
 
   const patterns = [
-    /\bkim\b/i,
-    /\bkimdir\b/i,
-    /\bhaqida\b/i,
-    /\bbiografiya\b/i,
-    /\btarjimai holi\b/i,
-    /\btugilgan\b/i,
-    /\bvafot etgan\b/i,
-    /\bqachon tugilgan\b/i,
-    /\bqayerda tugilgan\b/i,
-    /\bmillati\b/i,
-    /\bfuqaroligi\b/i,
-    /\bkasbi\b/i,
-    /\blavozimi\b/i,
     /\bpoytaxti\b/i,
     /\bqaysi davlat\b/i,
+    /\bqaysi mamlakat\b/i,
+    /\bqaysi davlatda\b/i,
+    /\bfuqaroligi\b/i,
+    /\bmillati\b/i,
+    /\bkasbi\b/i,
+    /\blavozimi\b/i,
+    /\bqayerda tugilgan\b/i,
+    /\bqachon tugilgan\b/i,
+    /\bvafot etgan\b/i,
+    /\bqachon vafot etgan\b/i,
     /\bqayerda joylashgan\b/i,
     /\bjoylashgan\b/i,
-    /\bqaysi mamlakat\b/i
+    /\bkim yaratgan\b/i,
+    /\bkim asos solgan\b/i,
+    /\bkim ixtiro qilgan\b/i,
+    /\bkim\b/i,
+    /\bkimdir\b/i
   ];
 
-  if (patterns.some(pattern => pattern.test(q))) {
-    return true;
-  }
-
-  return (
-    q.length >= 3 &&
-    q.length <= 100 &&
-    !/[0-9]/.test(q) &&
-    /\?\s*$/.test(q)
+  return patterns.some(
+    pattern =>
+      pattern.test(q)
   );
 }
 
-function cleanWikidataValue(text) {
+function cleanWikidataValue(
+  text
+) {
   return String(text || "")
-    .replace(/\s+/g, " ")
+    .replace(
+      /\s+/g,
+      " "
+    )
     .trim();
 }
 
-function getWikidataLabel(entity, language = "uz") {
+function getWikidataLabel(
+  entity,
+  language = "uz"
+) {
   return cleanWikidataValue(
-    entity?.labels?.[language]?.value ||
-    entity?.labels?.en?.value ||
-    entity?.labels?.ru?.value ||
+    entity?.labels?.[language]
+      ?.value ||
+    entity?.labels?.en
+      ?.value ||
+    entity?.labels?.ru
+      ?.value ||
     entity?.id ||
     ""
   );
 }
 
-function getWikidataDescription(entity, language = "uz") {
+function getWikidataDescription(
+  entity,
+  language = "uz"
+) {
   return cleanWikidataValue(
-    entity?.descriptions?.[language]?.value ||
-    entity?.descriptions?.en?.value ||
-    entity?.descriptions?.ru?.value ||
+    entity?.descriptions?.[
+      language
+    ]?.value ||
+    entity?.descriptions?.en
+      ?.value ||
+    entity?.descriptions?.ru
+      ?.value ||
     ""
   );
 }
 
-function getWikidataAliases(entity, language = "uz") {
+function getWikidataAliases(
+  entity,
+  language = "uz"
+) {
   const aliases = [];
-  for (const lang of [language, "en", "ru"]) {
-    for (const item of entity?.aliases?.[lang] || []) {
-      const value = cleanWikidataValue(item?.value || "");
-      if (value && !aliases.includes(value)) {
-        aliases.push(value);
+
+  for (
+    const lang
+    of [
+      language,
+      "en",
+      "ru"
+    ]
+  ) {
+    for (
+      const item
+      of entity?.aliases?.[
+        lang
+      ] || []
+    ) {
+      const value =
+        cleanWikidataValue(
+          item?.value ||
+            ""
+        );
+
+      if (
+        value &&
+        !aliases.includes(
+          value
+        )
+      ) {
+        aliases.push(
+          value
+        );
       }
     }
   }
-  return aliases.slice(0, 20);
+
+  return aliases.slice(
+    0,
+    20
+  );
 }
 
-function wikidataTimeToUzbek(value) {
-  const time = String(value || "").trim();
-  const m = time.match(/^[+-]?(\d{1,6})-(\d{2})-(\d{2})/);
-  if (!m) return "";
+function wikidataTimeToUzbek(
+  value
+) {
+  const time =
+    String(
+      value || ""
+    ).trim();
+
+  const m =
+    time.match(
+      /^[+-]?(\d{1,6})-(\d{2})-(\d{2})/
+    );
+
+  if (!m) {
+    return "";
+  }
 
   return `${m[3]}.${m[2]}.${m[1]}`;
 }
 
-function getWikidataClaimEntityIds(entity, property) {
-  const claims = entity?.claims?.[property];
-  if (!Array.isArray(claims)) return [];
+function getWikidataClaimEntityIds(
+  entity,
+  property
+) {
+  const claims =
+    entity?.claims?.[
+      property
+    ];
+
+  if (
+    !Array.isArray(
+      claims
+    )
+  ) {
+    return [];
+  }
 
   const ids = [];
 
-  for (const claim of claims.slice(0, 8)) {
-    const id = claim?.mainsnak?.datavalue?.value?.id;
-    if (typeof id === "string" && /^Q\d+$/i.test(id)) {
-      if (!ids.includes(id)) ids.push(id);
+  for (
+    const claim
+    of claims.slice(
+      0,
+      8
+    )
+  ) {
+    const id =
+      claim?.mainsnak
+        ?.datavalue
+        ?.value
+        ?.id;
+
+    if (
+      typeof id ===
+        "string" &&
+      /^Q\d+$/i.test(id)
+    ) {
+      if (
+        !ids.includes(
+          id
+        )
+      ) {
+        ids.push(id);
+      }
     }
   }
 
   return ids;
 }
 
-function getWikidataClaimTime(entity, property) {
-  const claims = entity?.claims?.[property];
-  if (!Array.isArray(claims)) return "";
+function getWikidataClaimTime(
+  entity,
+  property
+) {
+  const claims =
+    entity?.claims?.[
+      property
+    ];
 
-  for (const claim of claims.slice(0, 8)) {
+  if (
+    !Array.isArray(
+      claims
+    )
+  ) {
+    return "";
+  }
+
+  for (
+    const claim
+    of claims.slice(
+      0,
+      8
+    )
+  ) {
     const value =
-      claim?.mainsnak?.datavalue?.value?.time ||
+      claim?.mainsnak
+        ?.datavalue
+        ?.value
+        ?.time ||
       "";
 
     if (value) {
-      return wikidataTimeToUzbek(value);
+      return wikidataTimeToUzbek(
+        value
+      );
     }
   }
 
   return "";
 }
 
-function scoreWikidataSearchResult(query, item) {
-  const q = normalizeWikidataText(query);
-  const label = normalizeWikidataText(item?.label || "");
-  const description = normalizeWikidataText(item?.description || "");
-  const aliases = (item?.aliases || []).map(normalizeWikidataText);
+function hasWikidataClaimEntity(
+  entity,
+  property,
+  targetId
+) {
+  return getWikidataClaimEntityIds(
+    entity,
+    property
+  ).some(
+    id =>
+      String(id).toUpperCase() ===
+      String(targetId).toUpperCase()
+  );
+}
 
-  if (!q || !label) return 0;
+function isWikidataHuman(
+  entity
+) {
+  /*
+    Wikidata Q5 = human.
+  */
+  return hasWikidataClaimEntity(
+    entity,
+    "P31",
+    "Q5"
+  );
+}
+
+function scoreWikidataSearchResult(
+  query,
+  item
+) {
+  const q =
+    normalizeWikidataText(
+      query
+    );
+
+  const label =
+    normalizeWikidataText(
+      item?.label ||
+        ""
+    );
+
+  const description =
+    normalizeWikidataText(
+      item?.description ||
+        ""
+    );
+
+  const aliases =
+    (item?.aliases || [])
+      .map(
+        normalizeWikidataText
+      );
+
+  if (
+    !q ||
+    !label
+  ) {
+    return 0;
+  }
 
   let score = 0;
 
-  if (q === label) score += 300;
-  if (q.includes(label)) score += 180;
-  if (label.includes(q)) score += 150;
+  if (
+    q === label
+  ) {
+    score += 300;
+  }
 
-  const qWords = q.split(/\s+/).filter(Boolean);
-  const labelWords = label.split(/\s+/).filter(Boolean);
+  if (
+    q.includes(label)
+  ) {
+    score += 180;
+  }
+
+  if (
+    label.includes(q)
+  ) {
+    score += 150;
+  }
+
+  const qWords =
+    q.split(
+      /\s+/
+    ).filter(Boolean);
+
+  const labelWords =
+    label.split(
+      /\s+/
+    ).filter(Boolean);
 
   let matched = 0;
 
-  for (const qw of qWords) {
-    for (const lw of labelWords) {
-      if (qw === lw) {
+  for (
+    const qw
+    of qWords
+  ) {
+    for (
+      const lw
+      of labelWords
+    ) {
+      if (
+        qw === lw
+      ) {
         matched++;
         score += 70;
         break;
@@ -731,14 +3498,22 @@ function scoreWikidataSearchResult(query, item) {
       if (
         qw.length >= 4 &&
         lw.length >= 4 &&
-        (qw.startsWith(lw) || lw.startsWith(qw))
+        (
+          qw.startsWith(lw) ||
+          lw.startsWith(qw)
+        )
       ) {
         matched++;
         score += 45;
         break;
       }
 
-      if (levenshtein(qw, lw) <= 2) {
+      if (
+        levenshtein(
+          qw,
+          lw
+        ) <= 2
+      ) {
         matched++;
         score += 25;
         break;
@@ -746,48 +3521,107 @@ function scoreWikidataSearchResult(query, item) {
     }
   }
 
-  for (const alias of aliases) {
-    if (!alias) continue;
-    if (q === alias) score += 120;
-    else if (alias.includes(q) || q.includes(alias)) score += 60;
+  for (
+    const alias
+    of aliases
+  ) {
+    if (!alias) {
+      continue;
+    }
+
+    if (
+      q === alias
+    ) {
+      score += 120;
+    } else if (
+      alias.includes(q) ||
+      q.includes(alias)
+    ) {
+      score += 60;
+    }
   }
 
-  if (description) score += Math.min(description.length, 40);
+  if (
+    description
+  ) {
+    score +=
+      Math.min(
+        description.length,
+        40
+      );
+  }
 
-  score += (matched / Math.max(qWords.length, 1)) * 100;
+  score +=
+    (
+      matched /
+      Math.max(
+        qWords.length,
+        1
+      )
+    ) *
+    100;
 
   return score;
 }
 
-async function wikidataApiRequest(params) {
-  const query = new URLSearchParams({
-    ...params,
-    format: "json",
-    formatversion: "2",
-    origin: "*"
-  });
+async function wikidataApiRequest(
+  params
+) {
+  const query =
+    new URLSearchParams({
+      ...params,
+      format:
+        "json",
+      formatversion:
+        "2",
+      origin:
+        "*"
+    });
 
-  const url = `${WIKIDATA_API_URL}?${query.toString()}`;
+  const url =
+    `${WIKIDATA_API_URL}?${query.toString()}`;
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Accept": "application/json",
-      "User-Agent":
-        "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)"
-    },
-    signal: AbortSignal.timeout(12000)
-  });
+  const response =
+    await fetch(
+      url,
+      {
+        method: "GET",
+        headers: {
+          "Accept":
+            "application/json",
+          "User-Agent":
+            "QamirAI/1.0 (Qamir AI personal assistant; contact: admin@qamir.ai)"
+        },
+        signal:
+          AbortSignal.timeout(
+            12000
+          )
+      }
+    );
 
-  const data = await response.json().catch(() => ({}));
+  const data =
+    await response
+      .json()
+      .catch(
+        () => ({})
+      );
 
-  if (!response.ok) {
+  if (
+    !response.ok
+  ) {
     throw new Error(
-      `Wikidata HTTP ${response.status}: ${JSON.stringify(data).slice(0, 300)}`
+      `Wikidata HTTP ${response.status}: ${JSON.stringify(
+        data
+      ).slice(
+        0,
+        300
+      )}`
     );
   }
 
-  if (data?.error) {
+  if (
+    data?.error
+  ) {
     throw new Error(
       data.error.info ||
       "Wikidata API xatosi"
@@ -797,64 +3631,164 @@ async function wikidataApiRequest(params) {
   return data;
 }
 
-async function wikidataSearchEntities(language, query, limit = 8) {
-  const data = await wikidataApiRequest({
-    action: "wbsearchentities",
-    search: query,
-    language,
-    uselang: language,
-    type: "item",
-    limit: String(Math.min(20, Math.max(1, limit)))
-  });
+async function wikidataSearchEntities(
+  language,
+  query,
+  limit = 8
+) {
+  const data =
+    await wikidataApiRequest({
+      action:
+        "wbsearchentities",
+      search:
+        query,
+      language,
+      uselang:
+        language,
+      type:
+        "item",
+      limit:
+        String(
+          Math.min(
+            20,
+            Math.max(
+              1,
+              limit
+            )
+          )
+        )
+    });
 
-  return Array.isArray(data?.search)
+  return Array.isArray(
+    data?.search
+  )
     ? data.search
     : [];
 }
 
-async function wikidataGetEntities(ids) {
-  if (!ids.length) return {};
+async function wikidataGetEntities(
+  ids
+) {
+  if (
+    !ids.length
+  ) {
+    return {};
+  }
 
-  const data = await wikidataApiRequest({
-    action: "wbgetentities",
-    ids: ids.slice(0, 20).join("|"),
-    props: "labels|descriptions|aliases|claims|sitelinks",
-    languages: "uz|en|ru",
-    sitefilter: "uzwiki|enwiki|ruwiki"
-  });
+  const data =
+    await wikidataApiRequest({
+      action:
+        "wbgetentities",
+      ids:
+        ids
+          .slice(
+            0,
+            50
+          )
+          .join("|"),
+      props:
+        "labels|descriptions|aliases|claims|sitelinks",
+      languages:
+        "uz|en|ru",
+      sitefilter:
+        "uzwiki|enwiki|ruwiki"
+    });
 
   return data?.entities || {};
 }
 
-async function searchWikidata(userText) {
-  if (!looksLikeWikidataQuestion(userText)) {
-    return null;
-  }
-
-  const query = String(userText || "")
+function cleanWikidataQuestion(
+  text
+) {
+  return String(
+    text || ""
+  )
     .trim()
-    .replace(/[?!.]+$/g, "")
     .replace(
-      /\b(?:kim|kimdir|haqida|biografiya|tarjimai holi|kim yaratgan|kim asos solgan|kim ixtiro qilgan|qachon tugilgan|qayerda tugilgan|vafot etgan|millati|fuqaroligi|kasbi|lavozimi|qaysi davlat|qaysi mamlakat|qayerda joylashgan|joylashgan|poytaxti)\b/gi,
+      /[?!.]+$/g,
+      ""
+    )
+    .replace(
+      /\b(?:kim|kimdir|haqida|biografiya|tarjimai holi|kim yaratgan|kim asos solgan|kim ixtiro qilgan|qachon tugilgan|qayerda tugilgan|vafot etgan|qachon vafot etgan|millati|fuqaroligi|kasbi|lavozimi|qaysi davlat|qaysi mamlakat|qayerda joylashgan|joylashgan|poytaxti)\b/gi,
       " "
     )
-    .replace(/\s+/g, " ")
+    .replace(
+      /\s+/g,
+      " "
+    )
     .trim();
+}
 
-  if (!query || query.length < 2) {
+async function searchWikidata(
+  userText
+) {
+  if (
+    !looksLikeWikidataQuestion(
+      userText
+    )
+  ) {
     return null;
   }
+
+  const original =
+    String(
+      userText || ""
+    ).trim();
+
+  const query =
+    cleanWikidataQuestion(
+      original
+    );
+
+  if (
+    !query ||
+    query.length < 2
+  ) {
+    return null;
+  }
+
+  const isPersonQuestion =
+    /\bkim\b|\bkimdir\b|\bbiografiya\b|\btugilgan\b|\bvafot etgan\b|\bkasbi\b|\bmillati\b|\bfuqaroligi\b|\blavozimi\b/i.test(
+      normalizeWikidataText(
+        original
+      )
+    );
 
   const languageResults = [];
 
-  for (const language of ["uz", "en", "ru"]) {
+  for (
+    const language
+    of [
+      "uz",
+      "en",
+      "ru"
+    ]
+  ) {
     try {
-      const results = await wikidataSearchEntities(language, query, 8);
-      for (const item of results) {
-        languageResults.push({ ...item, searchLanguage: language });
+      const results =
+        await wikidataSearchEntities(
+          language,
+          query,
+          10
+        );
+
+      for (
+        const item
+        of results
+      ) {
+        languageResults.push({
+          ...item,
+          searchLanguage:
+            language
+        });
       }
 
-      if (languageResults.length >= 8) break;
+      if (
+        languageResults.length >=
+        15
+      ) {
+        break;
+      }
     } catch (e) {
       console.error(
         `WIKIDATA SEARCH ${language.toUpperCase()} ERROR:`,
@@ -863,77 +3797,267 @@ async function searchWikidata(userText) {
     }
   }
 
-  if (!languageResults.length) {
+  if (
+    !languageResults.length
+  ) {
     return null;
   }
 
   const unique = [];
   const seen = new Set();
 
-  for (const item of languageResults) {
-    const id = String(item?.id || "").trim();
-    if (!/^Q\d+$/i.test(id) || seen.has(id)) continue;
+  for (
+    const item
+    of languageResults
+  ) {
+    const id =
+      String(
+        item?.id ||
+        ""
+      ).trim();
+
+    if (
+      !/^Q\d+$/i.test(id) ||
+      seen.has(id)
+    ) {
+      continue;
+    }
+
     seen.add(id);
     unique.push(item);
   }
 
-  unique.sort(
-    (a, b) =>
-      scoreWikidataSearchResult(query, b) -
-      scoreWikidataSearchResult(query, a)
-  );
-
-  const best = unique[0];
-
-  if (!best) return null;
-
-  const bestScore = scoreWikidataSearchResult(query, best);
-
-  if (bestScore < 55) {
-    console.log(
-      `Wikidata: mos entity topilmadi. score=${bestScore}`
-    );
+  if (
+    !unique.length
+  ) {
     return null;
   }
 
-  const ids = [best.id];
+  unique.sort(
+    (a, b) =>
+      scoreWikidataSearchResult(
+        query,
+        b
+      ) -
+      scoreWikidataSearchResult(
+        query,
+        a
+      )
+  );
+
+  const candidateIds =
+    unique
+      .slice(
+        0,
+        12
+      )
+      .map(
+        x => x.id
+      );
 
   let entities = {};
 
   try {
-    entities = await wikidataGetEntities(ids);
+    entities =
+      await wikidataGetEntities(
+        candidateIds
+      );
   } catch (e) {
-    console.error("WIKIDATA ENTITY ERROR:", e.message);
+    console.error(
+      "WIKIDATA ENTITY ERROR:",
+      e.message
+    );
+
     return null;
   }
 
-  const entity = entities?.[best.id];
-  if (!entity) return null;
+  let bestItem =
+    null;
 
-  const label = getWikidataLabel(entity, "uz") || best.label || query;
+  let bestEntity =
+    null;
+
+  let bestScore =
+    -1;
+
+  for (
+    const item
+    of unique.slice(
+      0,
+      12
+    )
+  ) {
+    const entity =
+      entities?.[
+        item.id
+      ];
+
+    if (!entity) {
+      continue;
+    }
+
+    let score =
+      scoreWikidataSearchResult(
+        query,
+        item
+      );
+
+    /*
+      Eng muhim tuzatish:
+      "Albert Einstein" kabi odam haqidagi
+      savollarda Q5 = human bo‘lgan entity
+      kuchli ustunlik oladi.
+    */
+    if (
+      isPersonQuestion
+    ) {
+      if (
+        isWikidataHuman(
+          entity
+        )
+      ) {
+        score += 500;
+      } else {
+        score -= 250;
+      }
+    }
+
+    const label =
+      normalizeWikidataText(
+        getWikidataLabel(
+          entity,
+          "uz"
+        )
+      );
+
+    const normalizedQuery =
+      normalizeWikidataText(
+        query
+      );
+
+    if (
+      label ===
+      normalizedQuery
+    ) {
+      score += 300;
+    }
+
+    if (
+      score >
+      bestScore
+    ) {
+      bestScore =
+        score;
+
+      bestItem =
+        item;
+
+      bestEntity =
+        entity;
+    }
+  }
+
+  if (
+    !bestItem ||
+    !bestEntity ||
+    bestScore < 55
+  ) {
+    console.log(
+      `Wikidata: mos entity topilmadi. score=${bestScore}`
+    );
+
+    return null;
+  }
+
+  /*
+    Odam haqidagi savolda human bo‘lmagan
+    entity'ni qaytarmaymiz.
+  */
+  if (
+    isPersonQuestion &&
+    !isWikidataHuman(
+      bestEntity
+    )
+  ) {
+    console.log(
+      "Wikidata: top entity inson emas, rad etildi:",
+      bestItem.id
+    );
+
+    return null;
+  }
+
+  const entity =
+    bestEntity;
+
+  const label =
+    getWikidataLabel(
+      entity,
+      "uz"
+    ) ||
+    bestItem.label ||
+    query;
+
   const description =
-    getWikidataDescription(entity, "uz") ||
-    best.description ||
+    getWikidataDescription(
+      entity,
+      "uz"
+    ) ||
+    bestItem.description ||
     "";
 
-  const birthDate = getWikidataClaimTime(entity, "P569");
-  const deathDate = getWikidataClaimTime(entity, "P570");
+  const birthDate =
+    getWikidataClaimTime(
+      entity,
+      "P569"
+    );
+
+  const deathDate =
+    getWikidataClaimTime(
+      entity,
+      "P570"
+    );
 
   const relatedIds = [
-    ...getWikidataClaimEntityIds(entity, "P106"), // occupation
-    ...getWikidataClaimEntityIds(entity, "P27"),  // country of citizenship
-    ...getWikidataClaimEntityIds(entity, "P36"),  // capital
-    ...getWikidataClaimEntityIds(entity, "P131"), // located in
-    ...getWikidataClaimEntityIds(entity, "P39")   // position held
+    ...getWikidataClaimEntityIds(
+      entity,
+      "P106"
+    ),
+    ...getWikidataClaimEntityIds(
+      entity,
+      "P27"
+    ),
+    ...getWikidataClaimEntityIds(
+      entity,
+      "P36"
+    ),
+    ...getWikidataClaimEntityIds(
+      entity,
+      "P131"
+    ),
+    ...getWikidataClaimEntityIds(
+      entity,
+      "P39"
+    )
   ];
 
   let relatedEntities = {};
 
-  if (relatedIds.length) {
+  if (
+    relatedIds.length
+  ) {
     try {
-      relatedEntities = await wikidataGetEntities(
-        [...new Set(relatedIds)].slice(0, 12)
-      );
+      relatedEntities =
+        await wikidataGetEntities(
+          [
+            ...new Set(
+              relatedIds
+            )
+          ].slice(
+            0,
+            20
+          )
+        );
     } catch (e) {
       console.error(
         "WIKIDATA RELATED ENTITIES ERROR:",
@@ -942,292 +4066,5168 @@ async function searchWikidata(userText) {
     }
   }
 
-  const occupations = getWikidataClaimEntityIds(entity, "P106")
-    .map(id => getWikidataLabel(relatedEntities[id], "uz"))
-    .filter(Boolean)
-    .slice(0, 3);
+  const occupations =
+    getWikidataClaimEntityIds(
+      entity,
+      "P106"
+    )
+      .map(
+        id =>
+          getWikidataLabel(
+            relatedEntities[id],
+            "uz"
+          )
+      )
+      .filter(Boolean)
+      .slice(
+        0,
+        3
+      );
 
-  const citizenships = getWikidataClaimEntityIds(entity, "P27")
-    .map(id => getWikidataLabel(relatedEntities[id], "uz"))
-    .filter(Boolean)
-    .slice(0, 3);
+  const citizenships =
+    getWikidataClaimEntityIds(
+      entity,
+      "P27"
+    )
+      .map(
+        id =>
+          getWikidataLabel(
+            relatedEntities[id],
+            "uz"
+          )
+      )
+      .filter(Boolean)
+      .slice(
+        0,
+        3
+      );
 
-  const capitals = getWikidataClaimEntityIds(entity, "P36")
-    .map(id => getWikidataLabel(relatedEntities[id], "uz"))
-    .filter(Boolean)
-    .slice(0, 2);
+  const capitals =
+    getWikidataClaimEntityIds(
+      entity,
+      "P36"
+    )
+      .map(
+        id =>
+          getWikidataLabel(
+            relatedEntities[id],
+            "uz"
+          )
+      )
+      .filter(Boolean)
+      .slice(
+        0,
+        2
+      );
 
-  const positions = getWikidataClaimEntityIds(entity, "P39")
-    .map(id => getWikidataLabel(relatedEntities[id], "uz"))
-    .filter(Boolean)
-    .slice(0, 3);
+  const positions =
+    getWikidataClaimEntityIds(
+      entity,
+      "P39"
+    )
+      .map(
+        id =>
+          getWikidataLabel(
+            relatedEntities[id],
+            "uz"
+          )
+      )
+      .filter(Boolean)
+      .slice(
+        0,
+        3
+      );
 
-  const aliases = getWikidataAliases(entity, "uz");
+  const aliases =
+    getWikidataAliases(
+      entity,
+      "uz"
+    );
 
   const lines = [
     `📚 ${label}`
   ];
 
-  if (description) {
-    lines.push(`Tavsif: ${description}`);
+  if (
+    description
+  ) {
+    lines.push(
+      `Tavsif: ${description}`
+    );
   }
 
-  if (birthDate) {
-    lines.push(`Tug‘ilgan: ${birthDate}`);
+  if (
+    birthDate
+  ) {
+    lines.push(
+      `Tug‘ilgan: ${birthDate}`
+    );
   }
 
-  if (deathDate) {
-    lines.push(`Vafot etgan: ${deathDate}`);
+  if (
+    deathDate
+  ) {
+    lines.push(
+      `Vafot etgan: ${deathDate}`
+    );
   }
 
-  if (occupations.length) {
-    lines.push(`Kasbi: ${occupations.join(", ")}`);
+  if (
+    occupations.length
+  ) {
+    lines.push(
+      `Kasbi: ${occupations.join(
+        ", "
+      )}`
+    );
   }
 
-  if (positions.length) {
-    lines.push(`Lavozimi: ${positions.join(", ")}`);
+  if (
+    positions.length
+  ) {
+    lines.push(
+      `Lavozimi: ${positions.join(
+        ", "
+      )}`
+    );
   }
 
-  if (citizenships.length) {
-    lines.push(`Fuqaroligi: ${citizenships.join(", ")}`);
+  if (
+    citizenships.length
+  ) {
+    lines.push(
+      `Fuqaroligi: ${citizenships.join(
+        ", "
+      )}`
+    );
   }
 
-  if (capitals.length) {
-    lines.push(`Poytaxti: ${capitals.join(", ")}`);
+  if (
+    capitals.length
+  ) {
+    lines.push(
+      `Poytaxti: ${capitals.join(
+        ", "
+      )}`
+    );
   }
 
-  if (aliases.length) {
-    lines.push(`Boshqa nomlari: ${aliases.slice(0, 5).join(", ")}`);
+  if (
+    aliases.length
+  ) {
+    lines.push(
+      `Boshqa nomlari: ${aliases
+        .slice(
+          0,
+          5
+        )
+        .join(", ")}`
+    );
   }
-
 
   return {
-    answer: lines.join("\n"),
-    source: "wikidata",
-    id: entity.id,
-    title: label,
+    answer:
+      lines.join("\n"),
+
+    source:
+      "wikidata",
+
+    id:
+      entity.id,
+
+    title:
+      label,
+
     description,
-    birth_date: birthDate || null,
-    death_date: deathDate || null
+
+    birth_date:
+      birthDate ||
+      null,
+
+    death_date:
+      deathDate ||
+      null
   };
 }
 
 // ============================================================
-// END WIKIDATA
-// ============================================================
-
-// ============================================================
 // ADVANCED CALCULATOR
 // ============================================================
-function formatNumber(value){ if(Object.is(value,-0))value=0; if(Number.isInteger(value))return String(value); return Number(value.toFixed(12)).toLocaleString("uz-UZ",{maximumFractionDigits:12,useGrouping:false}); }
-function factorial(n){n=Number(n);if(!Number.isInteger(n)||n<0||n>170)throw new Error("Faktorial uchun 0 dan 170 gacha butun son kerak.");let r=1;for(let i=2;i<=n;i++)r*=i;return r;}
-function degToRad(x){return x*Math.PI/180;} function radToDeg(x){return x*180/Math.PI;}
-function normalizeMathQuestion(text){let q=String(text||"").trim().toLowerCase().replace(/[ʻ’‘`´]/g,"").replace(/[−–—]/g,"-").replace(/[×✕]/g,"*").replace(/÷/g,"/").replace(/\s+/g," ");if(!/[a-zA-Z]+\s*\([^)]*,/.test(q))q=q.replace(/(\d)\s*,\s*(\d)/g,"$1.$2");return q;}
-function calculatePercentage(text){
-  const q=normalizeMathQuestion(text).replace(/\?+$/g,"").trim();let m;
-  m=q.match(/^(-?\d+(?:\.\d+)?)\s*ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s*(?:qancha|necha|bo'ladi|boladi)?$/i); if(m){const base=Number(m[1]),percent=Number(m[2]),result=base*percent/100;return{answer:`${formatNumber(base)} ning ${formatNumber(percent)}% = ${formatNumber(result)}`,result};}
-  m=q.match(/^(?:hisobla|hisoblab\s+ber|top|aniqla)\s+(-?\d+(?:\.\d+)?)\s*ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)$/i); if(m){const base=Number(m[1]),percent=Number(m[2]),result=base*percent/100;return{answer:`${formatNumber(base)} ning ${formatNumber(percent)}% = ${formatNumber(result)}`,result};}
-  m=q.match(/^(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s+(?:ning\s+)?(-?\d+(?:\.\d+)?)(?:\s+dan)?$/i); if(m){const percent=Number(m[1]),base=Number(m[2]),result=base*percent/100;return{answer:`${formatNumber(percent)}% ${formatNumber(base)} ning = ${formatNumber(result)}`,result};}
-  m=q.match(/^(-?\d+(?:\.\d+)?)\s*%\s*(?:of|dan|ning)\s*(-?\d+(?:\.\d+)?)$/i); if(m){const percent=Number(m[1]),base=Number(m[2]),result=base*percent/100;return{answer:`${formatNumber(percent)}% of ${formatNumber(base)} = ${formatNumber(result)}`,result};}
-  m=q.match(/^(-?\d+(?:\.\d+)?)\s+dan\s+(-?\d+(?:\.\d+)?)\s*%\s*(?:ayir|ayirish|kamaytir|kamaytirish)$/i); if(m){const base=Number(m[1]),percent=Number(m[2]),result=base-base*percent/100;return{answer:`${formatNumber(base)} dan ${formatNumber(percent)}% ayirilsa = ${formatNumber(result)}`,result};}
-  m=q.match(/^(-?\d+(?:\.\d+)?)\s+ga\s+(-?\d+(?:\.\d+)?)\s*%\s*(?:qo'sh|qosh|qo'shish|qoshish|oshir|oshirish)$/i); if(m){const base=Number(m[1]),percent=Number(m[2]),result=base+base*percent/100;return{answer:`${formatNumber(base)} ga ${formatNumber(percent)}% qo‘shilsa = ${formatNumber(result)}`,result};}
-  m=q.match(/^(-?\d+(?:\.\d+)?)\s*([+-])\s*(-?\d+(?:\.\d+)?)\s*%$/); if(m){const base=Number(m[1]),op=m[2],percent=Number(m[3]),delta=base*percent/100,result=op==='+'?base+delta:base-delta;return{answer:`${formatNumber(base)} ${op} ${formatNumber(percent)}% = ${formatNumber(result)}`,result};}
+
+function formatNumber(
+  value
+) {
+  if (
+    Object.is(
+      value,
+      -0
+    )
+  ) {
+    value = 0;
+  }
+
+  if (
+    Number.isInteger(value)
+  ) {
+    return String(value);
+  }
+
+  return Number(
+    value.toFixed(12)
+  ).toLocaleString(
+    "uz-UZ",
+    {
+      maximumFractionDigits:
+        12,
+      useGrouping:
+        false
+    }
+  );
+}
+
+function factorial(n) {
+  n =
+    Number(n);
+
+  if (
+    !Number.isInteger(
+      n
+    ) ||
+    n < 0 ||
+    n > 170
+  ) {
+    throw new Error(
+      "Faktorial uchun 0 dan 170 gacha butun son kerak."
+    );
+  }
+
+  let result = 1;
+
+  for (
+    let i = 2;
+    i <= n;
+    i++
+  ) {
+    result *= i;
+  }
+
+  return result;
+}
+
+function degToRad(x) {
+  return (
+    x *
+    Math.PI /
+    180
+  );
+}
+
+function radToDeg(x) {
+  return (
+    x *
+    180 /
+    Math.PI
+  );
+}
+
+function normalizeMathQuestion(
+  text
+) {
+  let q =
+    String(text || "")
+      .trim()
+      .toLowerCase()
+      .replace(
+        /[ʻ’‘`´]/g,
+        ""
+      )
+      .replace(
+        /[−–—]/g,
+        "-"
+      )
+      .replace(
+        /[×✕]/g,
+        "*"
+      )
+      .replace(
+        /÷/g,
+        "/"
+      )
+      .replace(
+        /\s+/g,
+        " "
+      );
+
+  const hasFunctionArguments =
+    /[a-zA-Z]+\s*\([^)]*,/.test(
+      q
+    );
+
+  if (
+    !hasFunctionArguments
+  ) {
+    q =
+      q.replace(
+        /(\d)\s*,\s*(\d)/g,
+        "$1.$2"
+      );
+  }
+
+  return q;
+}
+
+function calculatePercentage(
+  text
+) {
+  const q =
+    normalizeMathQuestion(
+      text
+    )
+      .replace(
+        /\?+$/g,
+        ""
+      )
+      .trim();
+
+  let m;
+
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s*ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s*(?:qancha|necha|bo'ladi|boladi)?$/i
+    );
+
+  if (m) {
+    const base =
+      Number(m[1]);
+
+    const percent =
+      Number(m[2]);
+
+    const result =
+      base *
+      percent /
+      100;
+
+    return {
+      answer:
+        `${formatNumber(
+          base
+        )} ning ${formatNumber(
+          percent
+        )}% = ${formatNumber(
+          result
+        )}`,
+      result
+    };
+  }
+
+  m =
+    q.match(
+      /^(?:hisobla|hisoblab\s+ber|top|aniqla)\s+(-?\d+(?:\.\d+)?)\s*ning\s+(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)$/i
+    );
+
+  if (m) {
+    const base =
+      Number(m[1]);
+
+    const percent =
+      Number(m[2]);
+
+    const result =
+      base *
+      percent /
+      100;
+
+    return {
+      answer:
+        `${formatNumber(
+          base
+        )} ning ${formatNumber(
+          percent
+        )}% = ${formatNumber(
+          result
+        )}`,
+      result
+    };
+  }
+
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s*(?:foiz|foizi|foizini|%)\s+(?:ning\s+)?(-?\d+(?:\.\d+)?)(?:\s+dan)?$/i
+    );
+
+  if (m) {
+    const percent =
+      Number(m[1]);
+
+    const base =
+      Number(m[2]);
+
+    const result =
+      base *
+      percent /
+      100;
+
+    return {
+      answer:
+        `${formatNumber(
+          percent
+        )}% ${formatNumber(
+          base
+        )} ning = ${formatNumber(
+          result
+        )}`,
+      result
+    };
+  }
+
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s*%\s*(?:of|dan|ning)\s*(-?\d+(?:\.\d+)?)$/i
+    );
+
+  if (m) {
+    const percent =
+      Number(m[1]);
+
+    const base =
+      Number(m[2]);
+
+    const result =
+      base *
+      percent /
+      100;
+
+    return {
+      answer:
+        `${formatNumber(
+          percent
+        )}% of ${formatNumber(
+          base
+        )} = ${formatNumber(
+          result
+        )}`,
+      result
+    };
+  }
+
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s+dan\s+(-?\d+(?:\.\d+)?)\s*%\s*(?:ayir|ayirish|kamaytir|kamaytirish)$/i
+    );
+
+  if (m) {
+    const base =
+      Number(m[1]);
+
+    const percent =
+      Number(m[2]);
+
+    const result =
+      base -
+      (
+        base *
+        percent /
+        100
+      );
+
+    return {
+      answer:
+        `${formatNumber(
+          base
+        )} dan ${formatNumber(
+          percent
+        )}% ayirilsa = ${formatNumber(
+          result
+        )}`,
+      result
+    };
+  }
+
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s+ga\s+(-?\d+(?:\.\d+)?)\s*%\s*(?:qo'sh|qosh|qo'shish|qoshish|oshir|oshirish)$/i
+    );
+
+  if (m) {
+    const base =
+      Number(m[1]);
+
+    const percent =
+      Number(m[2]);
+
+    const result =
+      base +
+      (
+        base *
+        percent /
+        100
+      );
+
+    return {
+      answer:
+        `${formatNumber(
+          base
+        )} ga ${formatNumber(
+          percent
+        )}% qo‘shilsa = ${formatNumber(
+          result
+        )}`,
+      result
+    };
+  }
+
+  m =
+    q.match(
+      /^(-?\d+(?:\.\d+)?)\s*([+-])\s*(-?\d+(?:\.\d+)?)\s*%$/
+    );
+
+  if (m) {
+    const base =
+      Number(m[1]);
+
+    const op =
+      m[2];
+
+    const percent =
+      Number(m[3]);
+
+    const delta =
+      base *
+      percent /
+      100;
+
+    const result =
+      op === "+"
+        ? base + delta
+        : base - delta;
+
+    return {
+      answer:
+        `${formatNumber(
+          base
+        )} ${op} ${formatNumber(
+          percent
+        )}% = ${formatNumber(
+          result
+        )}`,
+      result
+    };
+  }
+
   return null;
 }
-function tokenizeMathExpression(expression){const tokens=[];let i=0;while(i<expression.length){const ch=expression[i];if(/\s/.test(ch)){i++;continue;}if(/[0-9.]/.test(ch)){const start=i;let dots=0;while(i<expression.length&&/[0-9.]/.test(expression[i])){if(expression[i]==='.')dots++;i++;}const raw=expression.slice(start,i);if(dots>1||raw==='.')throw new Error("Noto‘g‘ri son");const value=Number(raw);if(!Number.isFinite(value))throw new Error("Noto‘g‘ri son");tokens.push({type:"number",value});continue;}if(/[a-zA-Z]/.test(ch)){const start=i;while(i<expression.length&&/[a-zA-Z]/.test(expression[i]))i++;tokens.push({type:"identifier",value:expression.slice(start,i).toLowerCase()});continue;}if("+-*/%^(),!".includes(ch)){tokens.push({type:ch,value:ch});i++;continue;}throw new Error("Noma’lum matematik belgi");}return tokens;}
-function evaluateAdvancedExpression(expression){
-  const tokens=tokenizeMathExpression(expression);let pos=0;const constants={pi:Math.PI,e:Math.E};const functions={sqrt:x=>Math.sqrt(x),abs:x=>Math.abs(x),floor:x=>Math.floor(x),ceil:x=>Math.ceil(x),round:x=>Math.round(x),sin:x=>Math.sin(degToRad(x)),cos:x=>Math.cos(degToRad(x)),tan:x=>Math.tan(degToRad(x)),asin:x=>radToDeg(Math.asin(x)),acos:x=>radToDeg(Math.acos(x)),atan:x=>radToDeg(Math.atan(x)),ln:x=>Math.log(x),log:x=>Math.log10(x),exp:x=>Math.exp(x),pow:(a,b)=>Math.pow(a,b),min:(...a)=>Math.min(...a),max:(...a)=>Math.max(...a),fact:factorial};
-  const finite=v=>{if(typeof v!=="number"||!Number.isFinite(v))throw new Error("Matematik natija yaroqsiz");return v;};
-  function parseExpression(){let v=parseTerm();while(pos<tokens.length&&(tokens[pos].type==='+'||tokens[pos].type==='-')){const op=tokens[pos++].type,r=parseTerm();v=op==='+'?v+r:v-r;finite(v);}return v;}
-  function parseTerm(){let v=parsePower();while(pos<tokens.length&&('* / %'.includes(tokens[pos].type))){const op=tokens[pos++].type,r=parsePower();if((op==='/'||op==='%')&&r===0)throw new Error("0 ga bo‘lish mumkin emas");v=op==='*'?v*r:op==='/'?v/r:v%r;finite(v);}return v;}
-  function parsePower(){let v=parseUnary();if(pos<tokens.length&&tokens[pos].type==='^'){pos++;v=Math.pow(v,parsePower());finite(v);}return v;}
-  function parseUnary(){if(pos<tokens.length&&tokens[pos].type==='+'){pos++;return parseUnary();}if(pos<tokens.length&&tokens[pos].type==='-'){pos++;return finite(-parseUnary());}return parsePostfix();}
-  function parsePostfix(){let v=parsePrimary();while(pos<tokens.length){if(tokens[pos].type==='!'){pos++;v=factorial(v);continue;}if(tokens[pos].type==='%'){const next=tokens[pos+1];if(!next||[')', '+', '-'].includes(next.type)){pos++;v/=100;continue;}}break;}return finite(v);}
-  function parsePrimary(){if(pos>=tokens.length)throw new Error("Ifoda tugallanmagan");const t=tokens[pos];if(t.type==='number'){pos++;return t.value;}if(t.type==='identifier'){pos++;const name=t.value;if(pos<tokens.length&&tokens[pos].type==='('){pos++;const args=[];if(pos<tokens.length&&tokens[pos].type!==')'){args.push(parseExpression());while(pos<tokens.length&&tokens[pos].type===','){pos++;args.push(parseExpression());}}if(pos>=tokens.length||tokens[pos].type!==')')throw new Error("Funksiya qavsi yopilmagan");pos++;if(!Object.prototype.hasOwnProperty.call(functions,name))throw new Error(`Noma’lum funksiya: ${name}`);let result;if(name==='pow'){if(args.length!==2)throw new Error("pow(a,b) ikkita qiymat oladi");result=functions[name](args[0],args[1]);}else if(name==='min'||name==='max'){if(!args.length)throw new Error(`${name}() kamida bitta qiymat oladi`);result=functions[name](...args);}else{if(args.length!==1)throw new Error(`${name}() bitta qiymat oladi`);result=functions[name](args[0]);}return finite(result);}if(Object.prototype.hasOwnProperty.call(constants,name))return constants[name];throw new Error(`Noma’lum matematik nom: ${name}`);}if(t.type==='('){pos++;const v=parseExpression();if(pos>=tokens.length||tokens[pos].type!==')')throw new Error("Qavslar noto‘g‘ri");pos++;return v;}throw new Error("Ifoda noto‘g‘ri");}
-  const result=parseExpression();if(pos!==tokens.length)throw new Error("Ifodaning bir qismi tushunilmadi");return finite(result);
+
+function tokenizeMathExpression(
+  expression
+) {
+  const tokens = [];
+  let i = 0;
+
+  while (
+    i <
+    expression.length
+  ) {
+    const ch =
+      expression[i];
+
+    if (
+      /\s/.test(ch)
+    ) {
+      i++;
+      continue;
+    }
+
+    if (
+      /[0-9.]/.test(
+        ch
+      )
+    ) {
+      const start =
+        i;
+
+      let dotCount = 0;
+
+      while (
+        i <
+          expression.length &&
+        /[0-9.]/.test(
+          expression[i]
+        )
+      ) {
+        if (
+          expression[i] ===
+          "."
+        ) {
+          dotCount++;
+        }
+
+        i++;
+      }
+
+      const raw =
+        expression.slice(
+          start,
+          i
+        );
+
+      if (
+        dotCount > 1 ||
+        raw === "."
+      ) {
+        throw new Error(
+          "Noto‘g‘ri son"
+        );
+      }
+
+      const value =
+        Number(raw);
+
+      if (
+        !Number.isFinite(
+          value
+        )
+      ) {
+        throw new Error(
+          "Noto‘g‘ri son"
+        );
+      }
+
+      tokens.push({
+        type:
+          "number",
+        value
+      });
+
+      continue;
+    }
+
+    if (
+      /[a-zA-Z]/.test(
+        ch
+      )
+    ) {
+      const start =
+        i;
+
+      while (
+        i <
+          expression.length &&
+        /[a-zA-Z]/.test(
+          expression[i]
+        )
+      ) {
+        i++;
+      }
+
+      tokens.push({
+        type:
+          "identifier",
+        value:
+          expression
+            .slice(
+              start,
+              i
+            )
+            .toLowerCase()
+      });
+
+      continue;
+    }
+
+    if (
+      ch === "+" ||
+      ch === "-" ||
+      ch === "*" ||
+      ch === "/" ||
+      ch === "%" ||
+      ch === "^" ||
+      ch === "(" ||
+      ch === ")" ||
+      ch === "," ||
+      ch === "!"
+    ) {
+      tokens.push({
+        type:
+          ch,
+        value:
+          ch
+      });
+
+      i++;
+      continue;
+    }
+
+    throw new Error(
+      "Noma’lum matematik belgi"
+    );
+  }
+
+  return tokens;
 }
-function parsePoly(poly){let clean=poly.replace(/[()]/g,"").replace(/-/g,"+-");if(clean.startsWith('+'))clean=clean.slice(1);const terms=clean.split('+').filter(Boolean);let a=0,b=0,c=0;for(let term of terms){term=term.replace(/\*/g,"");let m=term.match(/^([+-]?\d*\.?\d*)x\^2$/);if(m){let k=m[1];a+=k===''||k==='+'?1:k==='-'?-1:Number(k);continue;}m=term.match(/^([+-]?\d*\.?\d*)x$/);if(m){let k=m[1];b+=k===''||k==='+'?1:k==='-'?-1:Number(k);continue;}if(/^[+-]?\d*\.?\d+$/.test(term)){c+=Number(term);continue;}return null;}return{a,b,c};}
-function solveQuadratic(text){let q=normalizeMathQuestion(text).replace(/x²/g,'x^2').replace(/\s+/g,'');if(!q.includes('=')||!q.includes('x'))return null;const parts=q.split('=');if(parts.length!==2)return null;const l=parsePoly(parts[0]),r=parsePoly(parts[1]);if(!l||!r)return null;const a=l.a-r.a,b=l.b-r.b,c=l.c-r.c;if(Math.abs(a)<1e-12&&Math.abs(b)<1e-12)return null;if(Math.abs(a)<1e-12)return{answer:`Tenglama yechimi: x = ${formatNumber(-c/b)}`};const D=b*b-4*a*c;if(D<0){const real=-b/(2*a),imag=Math.sqrt(-D)/Math.abs(2*a);return{answer:`Diskriminant D = ${formatNumber(D)}.\nHaqiqiy ildiz yo‘q.\nKompleks ildizlar:\nx₁ = ${formatNumber(real)} + ${formatNumber(imag)}i\nx₂ = ${formatNumber(real)} - ${formatNumber(imag)}i`};}if(Math.abs(D)<1e-12)return{answer:`Diskriminant D = 0.\nYagona ildiz: x = ${formatNumber(-b/(2*a))}`};const s=Math.sqrt(D);return{answer:`Diskriminant D = ${formatNumber(D)}.\nx₁ = ${formatNumber((-b+s)/(2*a))}\nx₂ = ${formatNumber((-b-s)/(2*a))}`};}
-function derivativePolynomial(text){const q=normalizeMathQuestion(text);if(!q.includes('d/dx')&&!q.includes('hosila'))return null;let expr=q.replace(/^.*d\/dx\s*\(?/i,'').replace(/\)?\s*$/g,'').replace(/^.*hosila\s*[:=]?\s*/i,'').replace(/x²/g,'x^2').replace(/\s+/g,'');const terms=expr.replace(/-/g,'+-').split('+').filter(Boolean),out=[];for(const original of terms){const term=original.replace(/\*/g,'');if(term==='x'){out.push('1');continue;}let m=term.match(/^([+-]?\d*\.?\d*)x\^(\d+(?:\.\d+)?)$/);if(m){let coef=m[1]===''||m[1]==='+'?1:m[1]==='-'?-1:Number(m[1]);const p=Number(m[2]),nc=coef*p,np=p-1;out.push(Math.abs(np)<1e-12?formatNumber(nc):Math.abs(np-1)<1e-12?`${formatNumber(nc)}x`:`${formatNumber(nc)}x^${formatNumber(np)}`);continue;}m=term.match(/^([+-]?\d*\.?\d*)x$/);if(m){let coef=m[1]===''||m[1]==='+'?1:m[1]==='-'?-1:Number(m[1]);out.push(formatNumber(coef));continue;}if(/^[+-]?\d*\.?\d+$/.test(term))continue;return null;}return{answer:out.length?`Hosila: ${out.join(' + ').replace(/\+\s+-/g,'- ')}`:"Hosila: 0"};}
-function definitePolynomialIntegral(text){const q=normalizeMathQuestion(text);if(!q.includes('integral')&&!q.includes('∫'))return null;let expression='',lower=null,upper=null,m=q.match(/(?:integral|∫)\s*(-?\d+(?:\.\d+)?)\s*(?:dan|to|-)\s*(-?\d+(?:\.\d+)?)\s*(?:gacha)?\s+(.+)/);if(m){lower=Number(m[1]);upper=Number(m[2]);expression=m[3];}if(lower===null||upper===null){m=q.match(/(.+?)\s+(?:dan|from)\s+(-?\d+(?:\.\d+)?)\s+(?:gacha|to)\s+(-?\d+(?:\.\d+)?)/);if(m){expression=m[1];lower=Number(m[2]);upper=Number(m[3]);}}if(lower===null||upper===null||!Number.isFinite(lower)||!Number.isFinite(upper)||!expression)return null;const terms=expression.replace(/x²/g,'x^2').replace(/\s+/g,'').replace(/-/g,'+-').split('+').filter(Boolean);function F(x){let total=0;for(let term of terms){term=term.replace(/\*/g,'');let m=term.match(/^([+-]?\d*\.?\d*)x\^(\d+(?:\.\d+)?)$/);if(m){let c=m[1]===''||m[1]==='+'?1:m[1]==='-'?-1:Number(m[1]),p=Number(m[2]);total+=c*Math.pow(x,p+1)/(p+1);continue;}m=term.match(/^([+-]?\d*\.?\d*)x$/);if(m){let c=m[1]===''||m[1]==='+'?1:m[1]==='-'?-1:Number(m[1]);total+=c*x*x/2;continue;}if(/^[+-]?\d*\.?\d+$/.test(term)){total+=Number(term)*x;continue;}throw new Error('integral');}return total;}try{return{answer:`Aniq integral natijasi: ${formatNumber(F(upper)-F(lower))}`};}catch{return null;}}
-function prepareMathExpression(expression){return String(expression||'').trim().replace(/π/g,'pi').replace(/√\s*([0-9.]+)/g,'sqrt($1)').replace(/(\d+(?:\.\d+)?)%(?=\s*(?:$|[+\-*/^)]))/g,'($1/100)').replace(/(\d+(?:\.\d+)?)%(?=\s*\))/g,'($1/100)');}
-function tryCalculate(text){const original=String(text||'').trim();if(!original)return null;const pct=calculatePercentage(original);if(pct)return{expression:original,result:pct.result,answer:`Javob: ${pct.answer}`};const quad=solveQuadratic(original);if(quad)return{expression:original,result:null,answer:quad.answer};const der=derivativePolynomial(original);if(der)return{expression:original,result:null,answer:der.answer};const integ=definitePolynomialIntegral(original);if(integ)return{expression:original,result:null,answer:integ.answer};let expression=normalizeMathQuestion(original).replace(/^(hisobla|hisoblab ber|hisob-kitob|calculate)\s*/i,'').replace(/^(necha|qancha|natijasi)\s+boladi\s*/i,'').replace(/\?+$/g,'').trim();expression=prepareMathExpression(expression);if(!/[0-9]/.test(expression)||(!/[+\-*/%^()]/.test(expression)&&!(/\b(sqrt|sin|cos|tan|asin|acos|atan|log|ln|exp|abs|floor|ceil|round|fact|pow|min|max)\b/i.test(expression)||/\bpi\b|\be\b/i.test(expression))))return null;if(!/^[0-9a-zA-Z_+\-*/%^().,\s√]+$/u.test(expression))return null;try{const result=evaluateAdvancedExpression(expression);return{expression,result,answer:`Javob: ${formatNumber(result)}`};}catch(e){console.error('CALCULATOR ERROR:',e.message);return null;}}
+
+function evaluateAdvancedExpression(
+  expression
+) {
+  const tokens =
+    tokenizeMathExpression(
+      expression
+    );
+
+  let pos = 0;
+
+  const constants = {
+    pi:
+      Math.PI,
+    e:
+      Math.E
+  };
+
+  const functions = {
+    sqrt:
+      x =>
+        Math.sqrt(x),
+
+    abs:
+      x =>
+        Math.abs(x),
+
+    floor:
+      x =>
+        Math.floor(x),
+
+    ceil:
+      x =>
+        Math.ceil(x),
+
+    round:
+      x =>
+        Math.round(x),
+
+    sin:
+      x =>
+        Math.sin(
+          degToRad(x)
+        ),
+
+    cos:
+      x =>
+        Math.cos(
+          degToRad(x)
+        ),
+
+    tan:
+      x =>
+        Math.tan(
+          degToRad(x)
+        ),
+
+    asin:
+      x =>
+        radToDeg(
+          Math.asin(x)
+        ),
+
+    acos:
+      x =>
+        radToDeg(
+          Math.acos(x)
+        ),
+
+    atan:
+      x =>
+        radToDeg(
+          Math.atan(x)
+        ),
+
+    ln:
+      x =>
+        Math.log(x),
+
+    log:
+      x =>
+        Math.log10(x),
+
+    exp:
+      x =>
+        Math.exp(x),
+
+    pow:
+      (a, b) =>
+        Math.pow(
+          a,
+          b
+        ),
+
+    min:
+      (...args) =>
+        Math.min(
+          ...args
+        ),
+
+    max:
+      (...args) =>
+        Math.max(
+          ...args
+        ),
+
+    fact:
+      factorial
+  };
+
+  function ensureFinite(
+    value
+  ) {
+    if (
+      typeof value !==
+        "number" ||
+      !Number.isFinite(
+        value
+      )
+    ) {
+      throw new Error(
+        "Matematik natija yaroqsiz"
+      );
+    }
+
+    return value;
+  }
+
+  function parseExpression() {
+    let value =
+      parseTerm();
+
+    while (
+      pos <
+        tokens.length &&
+      (
+        tokens[pos].type ===
+          "+" ||
+        tokens[pos].type ===
+          "-"
+      )
+    ) {
+      const op =
+        tokens[pos++].type;
+
+      const right =
+        parseTerm();
+
+      value =
+        op === "+"
+          ? value + right
+          : value - right;
+
+      ensureFinite(
+        value
+      );
+    }
+
+    return value;
+  }
+
+  function parseTerm() {
+    let value =
+      parsePower();
+
+    while (
+      pos <
+        tokens.length &&
+      (
+        tokens[pos].type ===
+          "*" ||
+        tokens[pos].type ===
+          "/" ||
+        tokens[pos].type ===
+          "%"
+      )
+    ) {
+      const op =
+        tokens[pos++].type;
+
+      const right =
+        parsePower();
+
+      if (
+        op === "/" ||
+        op === "%"
+      ) {
+        if (
+          right === 0
+        ) {
+          throw new Error(
+            "0 ga bo‘lish mumkin emas"
+          );
+        }
+      }
+
+      if (
+        op === "*"
+      ) {
+        value *= right;
+      } else if (
+        op === "/"
+      ) {
+        value /= right;
+      } else {
+        value %= right;
+      }
+
+      ensureFinite(
+        value
+      );
+    }
+
+    return value;
+  }
+
+  function parsePower() {
+    let value =
+      parseUnary();
+
+    if (
+      pos <
+        tokens.length &&
+      tokens[pos].type ===
+        "^"
+    ) {
+      pos++;
+
+      const right =
+        parsePower();
+
+      value =
+        Math.pow(
+          value,
+          right
+        );
+
+      ensureFinite(
+        value
+      );
+    }
+
+    return value;
+  }
+
+  function parseUnary() {
+    if (
+      pos <
+        tokens.length &&
+      tokens[pos].type ===
+        "+"
+    ) {
+      pos++;
+      return parseUnary();
+    }
+
+    if (
+      pos <
+        tokens.length &&
+      tokens[pos].type ===
+        "-"
+    ) {
+      pos++;
+
+      return ensureFinite(
+        -parseUnary()
+      );
+    }
+
+    return parsePostfix();
+  }
+
+  function parsePostfix() {
+    let value =
+      parsePrimary();
+
+    while (
+      pos <
+      tokens.length
+    ) {
+      if (
+        tokens[pos].type ===
+        "!"
+      ) {
+        pos++;
+
+        value =
+          factorial(
+            value
+          );
+
+        continue;
+      }
+
+      if (
+        tokens[pos].type ===
+        "%"
+      ) {
+        const next =
+          tokens[
+            pos + 1
+          ];
+
+        if (
+          !next ||
+          next.type ===
+            ")" ||
+          next.type ===
+            "+" ||
+          next.type ===
+            "-"
+        ) {
+          pos++;
+
+          value /=
+            100;
+
+          continue;
+        }
+      }
+
+      break;
+    }
+
+    return ensureFinite(
+      value
+    );
+  }
+
+  function parsePrimary() {
+    if (
+      pos >=
+      tokens.length
+    ) {
+      throw new Error(
+        "Ifoda tugallanmagan"
+      );
+    }
+
+    const token =
+      tokens[pos];
+
+    if (
+      token.type ===
+      "number"
+    ) {
+      pos++;
+      return token.value;
+    }
+
+    if (
+      token.type ===
+      "identifier"
+    ) {
+      pos++;
+
+      const name =
+        token.value;
+
+      if (
+        pos <
+          tokens.length &&
+        tokens[pos].type ===
+          "("
+      ) {
+        pos++;
+
+        const args = [];
+
+        if (
+          pos <
+            tokens.length &&
+          tokens[pos].type !==
+            ")"
+        ) {
+          args.push(
+            parseExpression()
+          );
+
+          while (
+            pos <
+              tokens.length &&
+            tokens[pos].type ===
+              ","
+          ) {
+            pos++;
+
+            args.push(
+              parseExpression()
+            );
+          }
+        }
+
+        if (
+          pos >=
+            tokens.length ||
+          tokens[pos].type !==
+            ")"
+        ) {
+          throw new Error(
+            "Funksiya qavsi yopilmagan"
+          );
+        }
+
+        pos++;
+
+        if (
+          !Object.prototype.hasOwnProperty.call(
+            functions,
+            name
+          )
+        ) {
+          throw new Error(
+            `Noma’lum funksiya: ${name}`
+          );
+        }
+
+        let result;
+
+        if (
+          name ===
+          "pow"
+        ) {
+          if (
+            args.length !==
+            2
+          ) {
+            throw new Error(
+              "pow(a,b) ikkita qiymat oladi"
+            );
+          }
+
+          result =
+            functions[
+              name
+            ](
+              args[0],
+              args[1]
+            );
+        } else if (
+          name === "min" ||
+          name === "max"
+        ) {
+          if (
+            !args.length
+          ) {
+            throw new Error(
+              `${name}() kamida bitta qiymat oladi`
+            );
+          }
+
+          result =
+            functions[
+              name
+            ](
+              ...args
+            );
+        } else {
+          if (
+            args.length !==
+            1
+          ) {
+            throw new Error(
+              `${name}() bitta qiymat oladi`
+            );
+          }
+
+          result =
+            functions[
+              name
+            ](
+              args[0]
+            );
+        }
+
+        return ensureFinite(
+          result
+        );
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(
+          constants,
+          name
+        )
+      ) {
+        return constants[
+          name
+        ];
+      }
+
+      throw new Error(
+        `Noma’lum matematik nom: ${name}`
+      );
+    }
+
+    if (
+      token.type ===
+      "("
+    ) {
+      pos++;
+
+      const value =
+        parseExpression();
+
+      if (
+        pos >=
+          tokens.length ||
+        tokens[pos].type !==
+          ")"
+      ) {
+        throw new Error(
+          "Qavslar noto‘g‘ri"
+        );
+      }
+
+      pos++;
+
+      return value;
+    }
+
+    throw new Error(
+      "Ifoda noto‘g‘ri"
+    );
+  }
+
+  const result =
+    parseExpression();
+
+  if (
+    pos !==
+    tokens.length
+  ) {
+    throw new Error(
+      "Ifodaning bir qismi tushunilmadi"
+    );
+  }
+
+  return ensureFinite(
+    result
+  );
+}
+
+function parsePoly(
+  poly
+) {
+  let clean =
+    poly
+      .replace(
+        /[()]/g,
+        ""
+      )
+      .replace(
+        /-/g,
+        "+-"
+      );
+
+  if (
+    clean.startsWith("+")
+  ) {
+    clean =
+      clean.slice(1);
+  }
+
+  const terms =
+    clean
+      .split("+")
+      .filter(Boolean);
+
+  let a = 0;
+  let b = 0;
+  let c = 0;
+
+  for (
+    let term
+    of terms
+  ) {
+    term =
+      term.replace(
+        /\*/g,
+        ""
+      );
+
+    let m =
+      term.match(
+        /^([+-]?\d*\.?\d*)x\^2$/
+      );
+
+    if (m) {
+      const k =
+        m[1];
+
+      a +=
+        k === "" ||
+        k === "+"
+          ? 1
+          : k === "-"
+            ? -1
+            : Number(k);
+
+      continue;
+    }
+
+    m =
+      term.match(
+        /^([+-]?\d*\.?\d*)x$/
+      );
+
+    if (m) {
+      const k =
+        m[1];
+
+      b +=
+        k === "" ||
+        k === "+"
+          ? 1
+          : k === "-"
+            ? -1
+            : Number(k);
+
+      continue;
+    }
+
+    if (
+      /^[+-]?\d*\.?\d+$/.test(
+        term
+      )
+    ) {
+      c +=
+        Number(term);
+
+      continue;
+    }
+
+    return null;
+  }
+
+  return {
+    a,
+    b,
+    c
+  };
+}
+
+function solveQuadratic(
+  text
+) {
+  let q =
+    normalizeMathQuestion(
+      text
+    )
+      .replace(
+        /x²/g,
+        "x^2"
+      )
+      .replace(
+        /\s+/g,
+        ""
+      );
+
+  if (
+    !q.includes("=") ||
+    !q.includes("x")
+  ) {
+    return null;
+  }
+
+  const parts =
+    q.split("=");
+
+  if (
+    parts.length !== 2
+  ) {
+    return null;
+  }
+
+  const left =
+    parsePoly(
+      parts[0]
+    );
+
+  const right =
+    parsePoly(
+      parts[1]
+    );
+
+  if (
+    !left ||
+    !right
+  ) {
+    return null;
+  }
+
+  const a =
+    left.a -
+    right.a;
+
+  const b =
+    left.b -
+    right.b;
+
+  const c =
+    left.c -
+    right.c;
+
+  if (
+    Math.abs(a) <
+      1e-12 &&
+    Math.abs(b) <
+      1e-12
+  ) {
+    return null;
+  }
+
+  if (
+    Math.abs(a) <
+    1e-12
+  ) {
+    return {
+      answer:
+        `Tenglama yechimi: x = ${formatNumber(
+          -c / b
+        )}`
+    };
+  }
+
+  const D =
+    b * b -
+    4 *
+      a *
+      c;
+
+  if (
+    D < 0
+  ) {
+    const real =
+      -b /
+      (2 * a);
+
+    const imaginary =
+      Math.sqrt(
+        -D
+      ) /
+      Math.abs(
+        2 * a
+      );
+
+    return {
+      answer:
+        `Diskriminant D = ${formatNumber(
+          D
+        )}.\n` +
+        `Haqiqiy ildiz yo‘q.\n` +
+        `Kompleks ildizlar:\n` +
+        `x₁ = ${formatNumber(
+          real
+        )} + ${formatNumber(
+          imaginary
+        )}i\n` +
+        `x₂ = ${formatNumber(
+          real
+        )} - ${formatNumber(
+          imaginary
+        )}i`
+    };
+  }
+
+  if (
+    Math.abs(D) <
+    1e-12
+  ) {
+    return {
+      answer:
+        `Diskriminant D = 0.\n` +
+        `Yagona ildiz: x = ${formatNumber(
+          -b /
+          (2 * a)
+        )}`
+    };
+  }
+
+  const sqrtD =
+    Math.sqrt(D);
+
+  return {
+    answer:
+      `Diskriminant D = ${formatNumber(
+        D
+      )}.\n` +
+      `x₁ = ${formatNumber(
+        (
+          -b +
+          sqrtD
+        ) /
+        (2 * a)
+      )}\n` +
+      `x₂ = ${formatNumber(
+        (
+          -b -
+          sqrtD
+        ) /
+        (2 * a)
+      )}`
+  };
+}
+
+function derivativePolynomial(
+  text
+) {
+  const q =
+    normalizeMathQuestion(
+      text
+    );
+
+  if (
+    !q.includes(
+      "d/dx"
+    ) &&
+    !q.includes(
+      "hosila"
+    )
+  ) {
+    return null;
+  }
+
+  let expr =
+    q
+      .replace(
+        /^.*d\/dx\s*\(?/i,
+        ""
+      )
+      .replace(
+        /\)?\s*$/g,
+        ""
+      )
+      .replace(
+        /^.*hosila\s*[:=]?\s*/i,
+        ""
+      )
+      .replace(
+        /x²/g,
+        "x^2"
+      )
+      .replace(
+        /\s+/g,
+        ""
+      );
+
+  const terms =
+    expr
+      .replace(
+        /-/g,
+        "+-"
+      )
+      .split("+")
+      .filter(Boolean);
+
+  const out = [];
+
+  for (
+    const original
+    of terms
+  ) {
+    const term =
+      original.replace(
+        /\*/g,
+        ""
+      );
+
+    if (
+      term === "x"
+    ) {
+      out.push("1");
+      continue;
+    }
+
+    let m =
+      term.match(
+        /^([+-]?\d*\.?\d*)x\^(\d+(?:\.\d+)?)$/
+      );
+
+    if (m) {
+      const coef =
+        m[1] === "" ||
+        m[1] === "+"
+          ? 1
+          : m[1] === "-"
+            ? -1
+            : Number(
+                m[1]
+              );
+
+      const power =
+        Number(
+          m[2]
+        );
+
+      const newCoef =
+        coef *
+        power;
+
+      const newPower =
+        power -
+        1;
+
+      if (
+        Math.abs(
+          newPower
+        ) <
+        1e-12
+      ) {
+        out.push(
+          formatNumber(
+            newCoef
+          )
+        );
+      } else if (
+        Math.abs(
+          newPower - 1
+        ) <
+        1e-12
+      ) {
+        out.push(
+          `${formatNumber(
+            newCoef
+          )}x`
+        );
+      } else {
+        out.push(
+          `${formatNumber(
+            newCoef
+          )}x^${formatNumber(
+            newPower
+          )}`
+        );
+      }
+
+      continue;
+    }
+
+    m =
+      term.match(
+        /^([+-]?\d*\.?\d*)x$/
+      );
+
+    if (m) {
+      const coef =
+        m[1] === "" ||
+        m[1] === "+"
+          ? 1
+          : m[1] === "-"
+            ? -1
+            : Number(
+                m[1]
+              );
+
+      out.push(
+        formatNumber(
+          coef
+        )
+      );
+
+      continue;
+    }
+
+    if (
+      /^[+-]?\d*\.?\d+$/.test(
+        term
+      )
+    ) {
+      continue;
+    }
+
+    return null;
+  }
+
+  return {
+    answer:
+      out.length
+        ? `Hosila: ${out
+            .join(
+              " + "
+            )
+            .replace(
+              /\+\s+-/g,
+              "- "
+            )}`
+        : "Hosila: 0"
+  };
+}
+
+function definitePolynomialIntegral(
+  text
+) {
+  const q =
+    normalizeMathQuestion(
+      text
+    );
+
+  if (
+    !q.includes(
+      "integral"
+    ) &&
+    !q.includes(
+      "∫"
+    )
+  ) {
+    return null;
+  }
+
+  let expression = "";
+  let lower = null;
+  let upper = null;
+
+  let m =
+    q.match(
+      /(?:integral|∫)\s*(-?\d+(?:\.\d+)?)\s*(?:dan|to|-)\s*(-?\d+(?:\.\d+)?)\s*(?:gacha)?\s+(.+)/
+    );
+
+  if (m) {
+    lower =
+      Number(
+        m[1]
+      );
+
+    upper =
+      Number(
+        m[2]
+      );
+
+    expression =
+      m[3];
+  }
+
+  if (
+    lower === null ||
+    upper === null
+  ) {
+    m =
+      q.match(
+        /(.+?)\s+(?:dan|from)\s+(-?\d+(?:\.\d+)?)\s+(?:gacha|to)\s+(-?\d+(?:\.\d+)?)/
+      );
+
+    if (m) {
+      expression =
+        m[1];
+
+      lower =
+        Number(
+          m[2]
+        );
+
+      upper =
+        Number(
+          m[3]
+        );
+    }
+  }
+
+  if (
+    lower === null ||
+    upper === null ||
+    !Number.isFinite(
+      lower
+    ) ||
+    !Number.isFinite(
+      upper
+    ) ||
+    !expression
+  ) {
+    return null;
+  }
+
+  const terms =
+    expression
+      .replace(
+        /x²/g,
+        "x^2"
+      )
+      .replace(
+        /\s+/g,
+        ""
+      )
+      .replace(
+        /-/g,
+        "+-"
+      )
+      .split("+")
+      .filter(Boolean);
+
+  function F(
+    x
+  ) {
+    let total = 0;
+
+    for (
+      let term
+      of terms
+    ) {
+      term =
+        term.replace(
+          /\*/g,
+          ""
+        );
+
+      let m =
+        term.match(
+          /^([+-]?\d*\.?\d*)x\^(\d+(?:\.\d+)?)$/
+        );
+
+      if (m) {
+        const coef =
+          m[1] === "" ||
+          m[1] === "+"
+            ? 1
+            : m[1] === "-"
+              ? -1
+              : Number(
+                  m[1]
+                );
+
+        const power =
+          Number(
+            m[2]
+          );
+
+        total +=
+          coef *
+          Math.pow(
+            x,
+            power + 1
+          ) /
+          (
+            power + 1
+          );
+
+        continue;
+      }
+
+      m =
+        term.match(
+          /^([+-]?\d*\.?\d*)x$/
+        );
+
+      if (m) {
+        const coef =
+          m[1] === "" ||
+          m[1] === "+"
+            ? 1
+            : m[1] === "-"
+              ? -1
+              : Number(
+                  m[1]
+                );
+
+        total +=
+          coef *
+          x *
+          x /
+          2;
+
+        continue;
+      }
+
+      if (
+        /^[+-]?\d*\.?\d+$/.test(
+          term
+        )
+      ) {
+        total +=
+          Number(term) *
+          x;
+
+        continue;
+      }
+
+      throw new Error(
+        "integral"
+      );
+    }
+
+    return total;
+  }
+
+  try {
+    return {
+      answer:
+        `Aniq integral natijasi: ${formatNumber(
+          F(upper) -
+          F(lower)
+        )}`
+    };
+  } catch {
+    return null;
+  }
+}
+
+function prepareMathExpression(
+  expression
+) {
+  return String(
+    expression || ""
+  )
+    .trim()
+    .replace(
+      /π/g,
+      "pi"
+    )
+    .replace(
+      /√\s*([0-9.]+)/g,
+      "sqrt($1)"
+    )
+    .replace(
+      /(\d+(?:\.\d+)?)%(?=\s*(?:$|[+\-*/^)]))/g,
+      "($1/100)"
+    )
+    .replace(
+      /(\d+(?:\.\d+)?)%(?=\s*\))/g,
+      "($1/100)"
+    );
+}
+
+function tryCalculate(
+  text
+) {
+  const original =
+    String(text || "")
+      .trim();
+
+  if (!original) {
+    return null;
+  }
+
+  const pct =
+    calculatePercentage(
+      original
+    );
+
+  if (pct) {
+    return {
+      expression:
+        original,
+      result:
+        pct.result,
+      answer:
+        `Javob: ${pct.answer}`
+    };
+  }
+
+  const quad =
+    solveQuadratic(
+      original
+    );
+
+  if (quad) {
+    return {
+      expression:
+        original,
+      result:
+        null,
+      answer:
+        quad.answer
+    };
+  }
+
+  const der =
+    derivativePolynomial(
+      original
+    );
+
+  if (der) {
+    return {
+      expression:
+        original,
+      result:
+        null,
+      answer:
+        der.answer
+    };
+  }
+
+  const integ =
+    definitePolynomialIntegral(
+      original
+    );
+
+  if (integ) {
+    return {
+      expression:
+        original,
+      result:
+        null,
+      answer:
+        integ.answer
+    };
+  }
+
+  let expression =
+    normalizeMathQuestion(
+      original
+    )
+      .replace(
+        /^(hisobla|hisoblab ber|hisob-kitob|calculate)\s*/i,
+        ""
+      )
+      .replace(
+        /^(necha|qancha|natijasi)\s+boladi\s*/i,
+        ""
+      )
+      .replace(
+        /\?+$/g,
+        ""
+      )
+      .trim();
+
+  expression =
+    prepareMathExpression(
+      expression
+    );
+
+  const containsNumber =
+    /[0-9]/.test(
+      expression
+    );
+
+  const containsMathOperator =
+    /[+\-*/%^()]/.test(
+      expression
+    );
+
+  const containsMathFunction =
+    /\b(sqrt|sin|cos|tan|asin|acos|atan|log|ln|exp|abs|floor|ceil|round|fact|pow|min|max)\b/i.test(
+      expression
+    ) ||
+    /\bpi\b|\be\b/i.test(
+      expression
+    );
+
+  if (
+    !containsNumber ||
+    (
+      !containsMathOperator &&
+      !containsMathFunction
+    )
+  ) {
+    return null;
+  }
+
+  if (
+    !/^[0-9a-zA-Z_+\-*/%^().,\s√]+$/u.test(
+      expression
+    )
+  ) {
+    return null;
+  }
+
+  try {
+    const result =
+      evaluateAdvancedExpression(
+        expression
+      );
+
+    return {
+      expression,
+      result,
+      answer:
+        `Javob: ${formatNumber(
+          result
+        )}`
+    };
+  } catch (e) {
+    console.error(
+      "CALCULATOR ERROR:",
+      e.message
+    );
+
+    return null;
+  }
+}
 
 // ============================================================
-// TRANSLATOR — command required; no API key
-// Google public -> LibreTranslate 1 -> LibreTranslate 2
+// TRANSLATOR
 // ============================================================
+
 const TRANSLATION_LANGUAGES = {
-  uz:["uzbek","uzbekcha","uzbekga","uzbekchaga","ozbek","ozbekcha","ozbekga","ozbekchaga","o'zbek","o'zbekcha","o'zbekga","o'zbekchaga","узбек","узбекский","узбекча","uz"],
-  ru:["rus","ruscha","rusga","ruschaga","russ","russian","русский","русскому","русча","руска","руский","ru"],
-  en:["ingliz","inglizcha","inglizga","inglizchaga","inglis","inglischa","inglich","inglichcha","english","английский","английскому","англич","en"],
-  kk:["qozoq","qozoqcha","qozoqqa","qozoqchaga","qazaq","kazakh","қазақ","қазақша","казахский","kk"],
-  tr:["turk","turkcha","turkka","turkchaga","turkish","türkçe","турецкий","tr"],
-  tg:["tojik","tojikcha","tojikka","tojikchaga","tajik","тоҷик","таджикский","tg"],
-  ar:["arab","arabcha","arabga","arabchaga","arabic","арабский","العربية","ar"],
-  de:["nemis","nemischa","nemisga","nemischaga","german","deutsch","немецкий","de"],
-  fr:["fransuz","fransuzcha","fransuzga","fransuzchaga","french","français","французский","fr"],
-  es:["ispan","ispancha","ispanga","ispanchaga","spanish","español","испанский","es"],
-  it:["italyan","italyancha","italyanga","italyanchaga","italian","italiano","итальянский","it"],
-  zh:["xitoy","xitoycha","xitoyga","xitoychaga","chinese","中文","китайский","zh"],
-  ko:["koreys","koreyscha","koreysga","koreyschaga","korean","한국어","корейский","ko"],
-  ja:["yapon","yaponcha","yaponga","yaponchaga","japanese","日本語","японский","ja"],
-  hi:["hind","hindcha","hindga","hindchaga","hindi","हिन्दी","хиндӣ","hi"],
-  pt:["portugal","portugalcha","portugalga","portugalchaga","portuguese","português","португальский","pt"]
+  uz: [
+    "uzbek",
+    "uzbekcha",
+    "uzbekga",
+    "uzbekchaga",
+    "ozbek",
+    "ozbekcha",
+    "ozbekga",
+    "ozbekchaga",
+    "o'zbek",
+    "o'zbekcha",
+    "o'zbekga",
+    "o'zbekchaga",
+    "узбек",
+    "узбекский",
+    "узбекча",
+    "uz"
+  ],
+
+  ru: [
+    "rus",
+    "ruscha",
+    "rusga",
+    "ruschaga",
+    "russ",
+    "russian",
+    "русский",
+    "русскому",
+    "русча",
+    "руска",
+    "руский",
+    "ru"
+  ],
+
+  en: [
+    "ingliz",
+    "inglizcha",
+    "inglizga",
+    "inglizchaga",
+    "inglis",
+    "inglischa",
+    "inglich",
+    "inglichcha",
+    "english",
+    "английский",
+    "английскому",
+    "англич",
+    "en"
+  ],
+
+  kk: [
+    "qozoq",
+    "qozoqcha",
+    "qozoqqa",
+    "qozoqchaga",
+    "qazaq",
+    "kazakh",
+    "қазақ",
+    "қазақша",
+    "казахский",
+    "kk"
+  ],
+
+  tr: [
+    "turk",
+    "turkcha",
+    "turkka",
+    "turkchaga",
+    "turkish",
+    "türkçe",
+    "турецкий",
+    "tr"
+  ],
+
+  tg: [
+    "tojik",
+    "tojikcha",
+    "tojikka",
+    "tojikchaga",
+    "tajik",
+    "тоҷик",
+    "таджикский",
+    "tg"
+  ],
+
+  ar: [
+    "arab",
+    "arabcha",
+    "arabga",
+    "arabchaga",
+    "arabic",
+    "арабский",
+    "العربية",
+    "ar"
+  ],
+
+  de: [
+    "nemis",
+    "nemischa",
+    "nemisga",
+    "nemischaga",
+    "german",
+    "deutsch",
+    "немецкий",
+    "de"
+  ],
+
+  fr: [
+    "fransuz",
+    "fransuzcha",
+    "fransuzga",
+    "fransuzchaga",
+    "french",
+    "français",
+    "французский",
+    "fr"
+  ],
+
+  es: [
+    "ispan",
+    "ispancha",
+    "ispanga",
+    "ispanchaga",
+    "spanish",
+    "español",
+    "испанский",
+    "es"
+  ],
+
+  it: [
+    "italyan",
+    "italyancha",
+    "italyanga",
+    "italyanchaga",
+    "italian",
+    "italiano",
+    "итальянский",
+    "it"
+  ],
+
+  zh: [
+    "xitoy",
+    "xitoycha",
+    "xitoyga",
+    "xitoychaga",
+    "chinese",
+    "中文",
+    "китайский",
+    "zh"
+  ],
+
+  ko: [
+    "koreys",
+    "koreyscha",
+    "koreysga",
+    "koreyschaga",
+    "korean",
+    "한국어",
+    "корейский",
+    "ko"
+  ],
+
+  ja: [
+    "yapon",
+    "yaponcha",
+    "yaponga",
+    "yaponchaga",
+    "japanese",
+    "日本語",
+    "японский",
+    "ja"
+  ],
+
+  hi: [
+    "hind",
+    "hindcha",
+    "hindga",
+    "hindchaga",
+    "hindi",
+    "हिन्दी",
+    "хиндӣ",
+    "hi"
+  ],
+
+  pt: [
+    "portugal",
+    "portugalcha",
+    "portugalga",
+    "portugalchaga",
+    "portuguese",
+    "português",
+    "португальский",
+    "pt"
+  ]
 };
-function normalizeTranslationText(text){return String(text||'').toLowerCase().replace(/[ʻ’‘`´]/g,"'").replace(/[?!.,;:()[\]{}]/g,' ').replace(/\s+/g,' ').trim();}
-function normalizeTranslationAlias(text){return normalizeTranslationText(text).replace(/\btiliga\b/g,'').replace(/\btilga\b/g,'').replace(/\btil\b/g,'').trim();}
-function translationLanguageCode(input){const value=normalizeTranslationAlias(input);if(!value)return null;let bestCode=null,bestScore=0;for(const [code,aliases] of Object.entries(TRANSLATION_LANGUAGES)){for(const alias of aliases){const a=normalizeTranslationAlias(alias);if(!a)continue;if(value===a)return code;if(value.includes(a)){if(bestScore<100){bestCode=code;bestScore=100;}continue;}if(value.split(/\s+/).length===1&&a.split(/\s+/).length===1){const d=levenshtein(value,a);if(d<=1&&bestScore<95){bestCode=code;bestScore=95;}else if(d<=2&&bestScore<85){bestCode=code;bestScore=85;}}}}return bestCode;}
-function extractTranslationTarget(text){const normalized=normalizeTranslationText(text);let bestCode=null,bestLength=0;for(const [code,aliases] of Object.entries(TRANSLATION_LANGUAGES)){for(const alias of aliases){const a=normalizeTranslationAlias(alias);if(!a)continue;const escaped=a.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');const pattern=new RegExp(`(?:^|\\s|:|-)(?:${escaped})(?=\\s|:|-|$)`,'iu');if(pattern.test(normalized)&&a.length>bestLength){bestCode=code;bestLength=a.length;}}}if(bestCode)return bestCode;for(const word of normalized.split(/\s+/).filter(Boolean)){const code=translationLanguageCode(word);if(code)return code;}return null;}
-function removeTranslationCommand(text,targetCode){let value=String(text||'').trim();const aliases=[...(TRANSLATION_LANGUAGES[targetCode]||[])].sort((a,b)=>b.length-a.length);for(const alias of aliases){const escaped=normalizeTranslationAlias(alias).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');value=value.replace(new RegExp(`(?:^|\\s|:|-)(?:${escaped})(?=\\s|:|-|$)`,'giu'),' ');}value=value.replace(/(?:^|\s)(?:shu\s+gapni|shu\s+matnni|shu\s+matn|shu\s+gap|matnni|gapni)(?=\s|:|$)/iu,' ').replace(/(?:^|\s)(?:tarjima\s+qil|tarjima\s+qilib\s+ber|tarjima|tarjma|o'gir|ogir|o'girish|ogirish|perevod\s+qil|perevod|perevot\s+qil|perevot|perewot|переведи|перевод|translate)(?=\s|:|$)/iu,' ').replace(/^(?:to|into|на|на\s+язык|к|для)\s+/iu,'');const colon=value.indexOf(':');if(colon>=0){const left=normalizeTranslationText(value.slice(0,colon));if(/(?:tarjima|tarjma|o'g|ogir|perevod|perevot|translate|рус|инглиз|ruscha|ruschaga|inglizcha|inglizchaga|uzbekcha|ozbekcha)/iu.test(left))value=value.slice(colon+1);}return value.replace(/^(?:shu\s+gapni|shu\s+matnni|shu\s+matn|shu\s+gap|matnni|gapni)\s*/iu,'').replace(/^(?:tarjima\s+qil|tarjima\s+qilib\s+ber|tarjima|tarjma|o'gir|ogir|o'girish|ogirish|perevod\s+qil|perevod|perevot\s+qil|perevot|perewot|переведи|перевод|translate)\s*:?\s*/iu,'').replace(/\s+(?:ni|nı)\s*$/iu,'').replace(/^[\s:,\-]+/,'').replace(/[\s:,\-]+$/,'').replace(/\s+/g,' ').trim();}
-function findTranslationIntent(text){const original=String(text||'').trim();if(!original)return null;const q=normalizeTranslationText(original);const hasCommand=/(?:^|\s)(tarjima\s+qil|tarjima\s+qilib\s+ber|tarjima|tarjma|o'gir|ogir|o'girish|ogirish|perevod\s+qil|perevod|perevot\s+qil|perevot|perewot|translate|перевод|переведи)(?=\s|:|$)/iu.test(q);if(!hasCommand)return null;const targetCode=extractTranslationTarget(original);if(!targetCode)return{targetCode:null,sourceText:"",error:"Tarjima tilini aniqlab bo‘lmadi. Masalan: «perevot ruschaga: Salom» deb yozing."};const sourceText=removeTranslationCommand(original,targetCode);if(!sourceText)return{targetCode,sourceText:"",error:"Tarjima qilinadigan matn topilmadi."};return{targetCode,sourceText};}
-async function translateWithGooglePublic(sourceText,targetCode){const url='https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl='+encodeURIComponent(targetCode)+'&dt=t&q='+encodeURIComponent(sourceText);const response=await fetch(url,{headers:{Accept:'application/json','User-Agent':'QamirAI/1.0'},signal:AbortSignal.timeout(12000)});if(!response.ok)throw new Error(`Google Translate HTTP ${response.status}`);const data=await response.json().catch(()=>null);if(!data)throw new Error('Google Translate javobi JSON emas.');const translated=Array.isArray(data[0])?data[0].filter(x=>Array.isArray(x)&&typeof x[0]==='string').map(x=>x[0]).join('').trim():'';if(!translated)throw new Error('Google Translate tarjima qaytarmadi.');return{text:translated,detectedSource:typeof data[2]==='string'?data[2]:''};}
-const LIBRETRANSLATE_ENDPOINTS=['https://translate.cutie.dating/translate','https://translate.fedilab.app/translate'];
-async function translateWithLibreTranslate(sourceText,targetCode){let last='LibreTranslate serverlari javob bermadi.';for(const endpoint of LIBRETRANSLATE_ENDPOINTS){try{const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','User-Agent':'QamirAI/1.0'},body:JSON.stringify({q:sourceText,source:'auto',target:targetCode,format:'text'}),signal:AbortSignal.timeout(15000)});const data=await response.json().catch(()=>({}));if(!response.ok){last=data?.error||`LibreTranslate HTTP ${response.status}`;continue;}const translated=data?.translatedText;if(typeof translated==='string'&&translated.trim())return{text:translated.trim(),detectedSource:data?.detectedLanguage?.language||data?.detectedSourceLanguage||''};last='LibreTranslate javobida translatedText topilmadi.';}catch(e){last=e?.message||'LibreTranslate ulanish xatosi';console.error('LibreTranslate endpoint xatosi:',endpoint,last);}}throw new Error(last);}
-async function tryTranslate(text){const intent=findTranslationIntent(text);if(!intent)return null;if(intent.error)throw new Error(intent.error);try{const r=await translateWithGooglePublic(intent.sourceText,intent.targetCode);return{sourceText:intent.sourceText,targetCode:intent.targetCode,translated:r.text,detectedSource:r.detectedSource};}catch(googleError){console.error('GOOGLE PUBLIC TRANSLATE ERROR:',googleError.message);try{const r=await translateWithLibreTranslate(intent.sourceText,intent.targetCode);return{sourceText:intent.sourceText,targetCode:intent.targetCode,translated:r.text,detectedSource:r.detectedSource};}catch(libreError){throw new Error(`Tarjima serverlari ishlamadi. Google: ${googleError.message}. LibreTranslate: ${libreError.message}`);}}}
+
+function normalizeTranslationText(
+  text
+) {
+  return String(
+    text || ""
+  )
+    .toLowerCase()
+    .replace(
+      /[ʻ’‘`´]/g,
+      "'"
+    )
+    .replace(
+      /[?!.,;:()[\]{}]/g,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+}
+
+function normalizeTranslationAlias(
+  text
+) {
+  return normalizeTranslationText(
+    text
+  )
+    .replace(
+      /\btiliga\b/g,
+      ""
+    )
+    .replace(
+      /\btilga\b/g,
+      ""
+    )
+    .replace(
+      /\btil\b/g,
+      ""
+    )
+    .trim();
+}
+
+function translationLanguageCode(
+  input
+) {
+  const value =
+    normalizeTranslationAlias(
+      input
+    );
+
+  if (!value) {
+    return null;
+  }
+
+  let bestCode = null;
+  let bestScore = 0;
+
+  for (
+    const [
+      code,
+      aliases
+    ]
+    of Object.entries(
+      TRANSLATION_LANGUAGES
+    )
+  ) {
+    for (
+      const alias
+      of aliases
+    ) {
+      const a =
+        normalizeTranslationAlias(
+          alias
+        );
+
+      if (!a) {
+        continue;
+      }
+
+      if (
+        value === a
+      ) {
+        return code;
+      }
+
+      if (
+        value.includes(a)
+      ) {
+        if (
+          bestScore < 100
+        ) {
+          bestCode =
+            code;
+
+          bestScore =
+            100;
+        }
+
+        continue;
+      }
+
+      if (
+        value.split(
+          /\s+/
+        ).length ===
+          1 &&
+        a.split(
+          /\s+/
+        ).length ===
+          1
+      ) {
+        const d =
+          levenshtein(
+            value,
+            a
+          );
+
+        if (
+          d <= 1 &&
+          bestScore < 95
+        ) {
+          bestCode =
+            code;
+
+          bestScore =
+            95;
+        } else if (
+          d <= 2 &&
+          bestScore < 85
+        ) {
+          bestCode =
+            code;
+
+          bestScore =
+            85;
+        }
+      }
+    }
+  }
+
+  return bestCode;
+}
+
+function extractTranslationTarget(
+  text
+) {
+  const normalized =
+    normalizeTranslationText(
+      text
+    );
+
+  let bestCode = null;
+  let bestLength = 0;
+
+  for (
+    const [
+      code,
+      aliases
+    ]
+    of Object.entries(
+      TRANSLATION_LANGUAGES
+    )
+  ) {
+    for (
+      const alias
+      of aliases
+    ) {
+      const a =
+        normalizeTranslationAlias(
+          alias
+        );
+
+      if (!a) {
+        continue;
+      }
+
+      const escaped =
+        a.replace(
+          /[.*+?^${}()|[\]\\]/g,
+          "\\$&"
+        );
+
+      const pattern =
+        new RegExp(
+          `(?:^|\\s|:|-)(?:${escaped})(?=\\s|:|-|$)`,
+          "iu"
+        );
+
+      if (
+        pattern.test(
+          normalized
+        )
+      ) {
+        if (
+          a.length >
+          bestLength
+        ) {
+          bestCode =
+            code;
+
+          bestLength =
+            a.length;
+        }
+      }
+    }
+  }
+
+  if (
+    bestCode
+  ) {
+    return bestCode;
+  }
+
+  for (
+    const word
+    of normalized
+      .split(
+        /\s+/
+      )
+      .filter(Boolean)
+  ) {
+    const code =
+      translationLanguageCode(
+        word
+      );
+
+    if (code) {
+      return code;
+    }
+  }
+
+  return null;
+}
+
+function removeTranslationCommand(
+  text,
+  targetCode
+) {
+  let value =
+    String(
+      text || ""
+    ).trim();
+
+  const aliases =
+    [
+      ...(TRANSLATION_LANGUAGES[
+        targetCode
+      ] || [])
+    ].sort(
+      (a, b) =>
+        b.length -
+        a.length
+    );
+
+  for (
+    const alias
+    of aliases
+  ) {
+    const escaped =
+      normalizeTranslationAlias(
+        alias
+      ).replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
+
+    value =
+      value.replace(
+        new RegExp(
+          `(?:^|\\s|:|-)(?:${escaped})(?=\\s|:|-|$)`,
+          "giu"
+        ),
+        " "
+      );
+  }
+
+  value =
+    value
+      .replace(
+        /(?:^|\s)(?:shu\s+gapni|shu\s+matnni|shu\s+matn|shu\s+gap|matnni|gapni)(?=\s|:|$)/iu,
+        " "
+      )
+      .replace(
+        /(?:^|\s)(?:tarjima\s+qil|tarjima\s+qilib\s+ber|tarjima|tarjma|o'gir|ogir|o'girish|ogirish|perevod\s+qil|perevod|perevot\s+qil|perevot|perewot|переведи|перевод|translate)(?=\s|:|$)/iu,
+        " "
+      )
+      .replace(
+        /^(?:to|into|на|на\s+язык|к|для)\s+/iu,
+        ""
+      );
+
+  const colon =
+    value.indexOf(":");
+
+  if (
+    colon >= 0
+  ) {
+    const left =
+      normalizeTranslationText(
+        value.slice(
+          0,
+          colon
+        )
+      );
+
+    if (
+      /(?:tarjima|tarjma|o'g|ogir|perevod|perevot|translate|рус|инглиз|ruscha|ruschaga|inglizcha|inglizchaga|uzbekcha|ozbekcha)/iu.test(
+        left
+      )
+    ) {
+      value =
+        value.slice(
+          colon + 1
+        );
+    }
+  }
+
+  return value
+    .replace(
+      /^(?:shu\s+gapni|shu\s+matnni|shu\s+matn|shu\s+gap|matnni|gapni)\s*/iu,
+      ""
+    )
+    .replace(
+      /^(?:tarjima\s+qil|tarjima\s+qilib\s+ber|tarjima|tarjma|o'gir|ogir|o'girish|ogirish|perevod\s+qil|perevod|perevot\s+qil|perevot|perewot|переведи|перевод|translate)\s*:?\s*/iu,
+      ""
+    )
+    .replace(
+      /\s+(?:ni|nı)\s*$/iu,
+      ""
+    )
+    .replace(
+      /^[\s:,\-]+/,
+      ""
+    )
+    .replace(
+      /[\s:,\-]+$/,
+      ""
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+}
+
+function findTranslationIntent(
+  text
+) {
+  const original =
+    String(
+      text || ""
+    ).trim();
+
+  if (!original) {
+    return null;
+  }
+
+  const q =
+    normalizeTranslationText(
+      original
+    );
+
+  const hasCommand =
+    /(?:^|\s)(tarjima\s+qil|tarjima\s+qilib\s+ber|tarjima|tarjma|o'gir|ogir|o'girish|ogirish|perevod\s+qil|perevod|perevot\s+qil|perevot|perewot|translate|перевод|переведи)(?=\s|:|$)/iu.test(
+      q
+    );
+
+  if (!hasCommand) {
+    return null;
+  }
+
+  const targetCode =
+    extractTranslationTarget(
+      original
+    );
+
+  if (!targetCode) {
+    return {
+      targetCode:
+        null,
+      sourceText:
+        "",
+      error:
+        "Tarjima tilini aniqlab bo‘lmadi. Masalan: «perevot ruschaga: Salom» deb yozing."
+    };
+  }
+
+  const sourceText =
+    removeTranslationCommand(
+      original,
+      targetCode
+    );
+
+  if (!sourceText) {
+    return {
+      targetCode,
+      sourceText:
+        "",
+      error:
+        "Tarjima qilinadigan matn topilmadi."
+    };
+  }
+
+  return {
+    targetCode,
+    sourceText
+  };
+}
+
+async function translateWithGooglePublic(
+  sourceText,
+  targetCode
+) {
+  const url =
+    "https://translate.googleapis.com/translate_a/single" +
+    "?client=gtx" +
+    "&sl=auto" +
+    `&tl=${encodeURIComponent(
+      targetCode
+    )}` +
+    "&dt=t" +
+    `&q=${encodeURIComponent(
+      sourceText
+    )}`;
+
+  const response =
+    await fetch(
+      url,
+      {
+        headers: {
+          Accept:
+            "application/json",
+          "User-Agent":
+            "QamirAI/1.0"
+        },
+        signal:
+          AbortSignal.timeout(
+            12000
+          )
+      }
+    );
+
+  if (
+    !response.ok
+  ) {
+    throw new Error(
+      `Google Translate HTTP ${response.status}`
+    );
+  }
+
+  const data =
+    await response
+      .json()
+      .catch(
+        () => null
+      );
+
+  if (!data) {
+    throw new Error(
+      "Google Translate javobi JSON emas."
+    );
+  }
+
+  const translated =
+    Array.isArray(
+      data[0]
+    )
+      ? data[0]
+          .filter(
+            x =>
+              Array.isArray(x) &&
+              typeof x[0] ===
+                "string"
+          )
+          .map(
+            x => x[0]
+          )
+          .join("")
+          .trim()
+      : "";
+
+  if (!translated) {
+    throw new Error(
+      "Google Translate tarjima qaytarmadi."
+    );
+  }
+
+  return {
+    text:
+      translated,
+    detectedSource:
+      typeof data[2] ===
+      "string"
+        ? data[2]
+        : ""
+  };
+}
+
+const LIBRETRANSLATE_ENDPOINTS = [
+  "https://translate.cutie.dating/translate",
+  "https://translate.fedilab.app/translate"
+];
+
+async function translateWithLibreTranslate(
+  sourceText,
+  targetCode
+) {
+  let last =
+    "LibreTranslate serverlari javob bermadi.";
+
+  for (
+    const endpoint
+    of LIBRETRANSLATE_ENDPOINTS
+  ) {
+    try {
+      const response =
+        await fetch(
+          endpoint,
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              "Accept":
+                "application/json",
+              "User-Agent":
+                "QamirAI/1.0"
+            },
+            body:
+              JSON.stringify({
+                q:
+                  sourceText,
+                source:
+                  "auto",
+                target:
+                  targetCode,
+                format:
+                  "text"
+              }),
+            signal:
+              AbortSignal.timeout(
+                15000
+              )
+          }
+        );
+
+      const data =
+        await response
+          .json()
+          .catch(
+            () => ({})
+          );
+
+      if (
+        !response.ok
+      ) {
+        last =
+          data?.error ||
+          `LibreTranslate HTTP ${response.status}`;
+        continue;
+      }
+
+      const translated =
+        data?.translatedText;
+
+      if (
+        typeof translated ===
+          "string" &&
+        translated.trim()
+      ) {
+        return {
+          text:
+            translated.trim(),
+          detectedSource:
+            data?.detectedLanguage
+              ?.language ||
+            data?.detectedSourceLanguage ||
+            ""
+        };
+      }
+
+      last =
+        "LibreTranslate javobida translatedText topilmadi.";
+    } catch (e) {
+      last =
+        e?.message ||
+        "LibreTranslate ulanish xatosi";
+
+      console.error(
+        "LibreTranslate endpoint xatosi:",
+        endpoint,
+        last
+      );
+    }
+  }
+
+  throw new Error(
+    last
+  );
+}
+
+async function tryTranslate(
+  text
+) {
+  const intent =
+    findTranslationIntent(
+      text
+    );
+
+  if (!intent) {
+    return null;
+  }
+
+  if (
+    intent.error
+  ) {
+    throw new Error(
+      intent.error
+    );
+  }
+
+  try {
+    const r =
+      await translateWithGooglePublic(
+        intent.sourceText,
+        intent.targetCode
+      );
+
+    return {
+      sourceText:
+        intent.sourceText,
+      targetCode:
+        intent.targetCode,
+      translated:
+        r.text,
+      detectedSource:
+        r.detectedSource
+    };
+  } catch (
+    googleError
+  ) {
+    console.error(
+      "GOOGLE PUBLIC TRANSLATE ERROR:",
+      googleError.message
+    );
+
+    try {
+      const r =
+        await translateWithLibreTranslate(
+          intent.sourceText,
+          intent.targetCode
+        );
+
+      return {
+        sourceText:
+          intent.sourceText,
+        targetCode:
+          intent.targetCode,
+        translated:
+          r.text,
+        detectedSource:
+          r.detectedSource
+      };
+    } catch (
+      libreError
+    ) {
+      throw new Error(
+        `Tarjima serverlari ishlamadi. Google: ${googleError.message}. LibreTranslate: ${libreError.message}`
+      );
+    }
+  }
+}
 
 // ============================================================
 // GEMINI
 // ============================================================
-async function getSettings(){const rows=await db(`SELECT * FROM settings WHERE id = 1`);return rows[0]||{};}
-async function askGemini(userText,history,knowledge){const key=process.env.GEMINI_API_KEY;if(!key)return null;const settings=await getSettings(),model=process.env.GEMINI_MODEL||settings.model||'gemini-2.5-flash',context=knowledge.map((x,i)=>`[QAMIR BILIMI ${i+1}]\nSavol: ${x.question||x.title}\nJavob: ${x.answer}`).join('\n\n');const systemPrompt=`Siz Qamir AI nomli shaxsiy sun'iy intellekt yordamchisisiz.\n\nASOSIY TAMOYIL:\nQamir AI ning asosiy manbasi Admin bergan bilimlardir.\nGemini faqat yordamchi vosita.\n\nAgar mos bilim aniq topilsa, shu bilimga tayaning.\nAgar mos bilim topilmasa, savolga umumiy foydali javob bering.\nBoshqa mavzudagi bilimni foydalanuvchi savoliga mos deb ko‘rsatmang.\nFaktni o‘ylab topmang.\n\nAGENT ROLI:\n${settings.role||''}\n\nASOSIY KO‘RSATMA:\n${settings.instruction||''}\n\nMAJBURIY QOIDALAR:\n${settings.must_rules||''}\n\nTAQIQLAR:\n${settings.never_rules||''}\n\nMIJOZ BILAN MUOMALA:\n${settings.customer_rules||''}\n\nJAVOB USLUBI:\nTil: ${settings.language||'O‘zbek'}\nOhang: ${settings.tone||'Samimiy'}\nEmoji: ${settings.emoji||'some'}\nUzunlik: ${settings.answer_length||'O‘rtacha'}\n\nMUHIM:\nSavolga to‘g‘ridan-to‘g‘ri va tabiiy javob bering.\nBilim matnini to‘liq ko‘chirmang.\nAgar foydalanuvchi hisob-kitob so‘rasa, aniq natija bering.\n\nQAMIR BILIMLARI:\n${context||'(Mos bilim topilmadi.)'}`;const contents=(history||[]).slice(-18).map(m=>({role:m.sender==='assistant'?'model':'user',parts:[{text:String(m.text)}]}));contents.push({role:'user',parts:[{text:String(userText)}]});const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({systemInstruction:{parts:[{text:systemPrompt}]},contents,generationConfig:{temperature:Math.max(0,Math.min(2,Number(settings.temperature??0.7))),maxOutputTokens:Math.max(64,Math.min(8192,Number(settings.max_tokens??1024)))}})});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data?.error?.message||`Gemini HTTP ${response.status}`);return(data?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim()||null;}
+
+async function getSettings() {
+  const rows =
+    await db(
+      `SELECT * FROM settings WHERE id = 1`
+    );
+
+  return rows[0] || {};
+}
+
+async function askGemini(
+  userText,
+  history,
+  knowledge
+) {
+  const key =
+    process.env.GEMINI_API_KEY;
+
+  if (!key) {
+    return null;
+  }
+
+  const settings =
+    await getSettings();
+
+  const model =
+    process.env.GEMINI_MODEL ||
+    settings.model ||
+    "gemini-2.5-flash";
+
+  const context =
+    knowledge
+      .map(
+        (x, i) =>
+          `[QAMIR BILIMI ${i + 1}]
+Savol: ${
+            x.question ||
+            x.title
+          }
+Javob: ${x.answer}`
+      )
+      .join(
+        "\n\n"
+      );
+
+  const systemPrompt = `
+Siz Qamir AI nomli shaxsiy sun'iy intellekt yordamchisisiz.
+
+ASOSIY TAMOYIL:
+Qamir AI ning asosiy manbasi Admin bergan bilimlardir.
+Gemini faqat yordamchi vosita.
+
+Agar mos bilim aniq topilsa,
+shu bilimga tayaning.
+
+Agar mos bilim topilmasa,
+savolga umumiy foydali javob bering.
+
+Boshqa mavzudagi bilimni foydalanuvchi
+savoliga mos deb ko‘rsatmang.
+
+Faktni o‘ylab topmang.
+
+AGENT ROLI:
+${settings.role || ""}
+
+ASOSIY KO‘RSATMA:
+${settings.instruction || ""}
+
+MAJBURIY QOIDALAR:
+${settings.must_rules || ""}
+
+TAQIQLAR:
+${settings.never_rules || ""}
+
+MIJOZ BILAN MUOMALA:
+${settings.customer_rules || ""}
+
+JAVOB USLUBI:
+Til: ${
+    settings.language ||
+    "O‘zbek"
+  }
+Ohang: ${
+    settings.tone ||
+    "Samimiy"
+  }
+Emoji: ${
+    settings.emoji ||
+    "some"
+  }
+Uzunlik: ${
+    settings.answer_length ||
+    "O‘rtacha"
+  }
+
+MUHIM:
+Savolga to‘g‘ridan-to‘g‘ri va tabiiy javob bering.
+Bilim matnini to‘liq ko‘chirmang.
+Agar foydalanuvchi hisob-kitob so‘rasa,
+aniq natija bering.
+
+QAMIR BILIMLARI:
+${
+    context ||
+    "(Mos bilim topilmadi.)"
+  }
+`;
+
+  const contents =
+    (history || [])
+      .slice(-18)
+      .map(
+        m => ({
+          role:
+            m.sender ===
+            "assistant"
+              ? "model"
+              : "user",
+          parts: [
+            {
+              text:
+                String(
+                  m.text
+                )
+            }
+          ]
+        })
+      );
+
+  contents.push({
+    role:
+      "user",
+    parts: [
+      {
+        text:
+          String(
+            userText
+          )
+      }
+    ]
+  });
+
+  const response =
+    await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        model
+      )}:generateContent?key=${encodeURIComponent(
+        key
+      )}`,
+      {
+        method:
+          "POST",
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+        body:
+          JSON.stringify({
+            systemInstruction: {
+              parts: [
+                {
+                  text:
+                    systemPrompt
+                }
+              ]
+            },
+            contents,
+            generationConfig: {
+              temperature:
+                Math.max(
+                  0,
+                  Math.min(
+                    2,
+                    Number(
+                      settings.temperature ??
+                      0.7
+                    )
+                  )
+                ),
+              maxOutputTokens:
+                Math.max(
+                  64,
+                  Math.min(
+                    8192,
+                    Number(
+                      settings.max_tokens ??
+                      1024
+                    )
+                  )
+                )
+            }
+          })
+      }
+    );
+
+  const data =
+    await response
+      .json()
+      .catch(
+        () => ({})
+      );
+
+  if (
+    !response.ok
+  ) {
+    throw new Error(
+      data?.error?.message ||
+      `Gemini HTTP ${response.status}`
+    );
+  }
+
+  return (
+    data
+      ?.candidates?.[0]
+      ?.content?.parts ||
+    []
+  )
+    .map(
+      p =>
+        p.text ||
+        ""
+    )
+    .join("")
+    .trim() ||
+    null;
+}
 
 // ============================================================
 // HEALTH / AUTH
 // ============================================================
-app.get('/api/health',async(req,res)=>{try{await db('SELECT 1');res.json({ok:true,database:'connected',gemini:Boolean(process.env.GEMINI_API_KEY),translator:true,weather:true,currency:true,wikidata:true,model:process.env.GEMINI_MODEL||'gemini-2.5-flash'});}catch(e){res.status(500).json({ok:false,database:'error',error:e.message});}});
-async function register(req,res){try{const{username,email='',password}=req.body||{},un=String(username||'').trim();if(un.length<3||String(password||'').length<6)return res.status(400).json({error:"Login kamida 3, parol kamida 6 belgidan iborat bo'lsin"});const rows=await db(`INSERT INTO users (username,email,password_hash) VALUES ($1,$2,$3) RETURNING id,username,email,birth_date,city,avatar,is_admin,created_at,last_seen`,[un,String(email).trim(),hashPassword(password)]);res.status(201).json({success:true,user:safeUser(rows[0]),token:String(rows[0].id)});}catch(e){if(e.code==='23505')return res.status(409).json({error:'Bu login allaqachon mavjud'});console.error('REGISTER ERROR:',e);res.status(500).json({error:"Ro'yxatdan o'tishda server xatosi"});}}
-async function login(req,res){try{const{username,password}=req.body||{},rows=await db(`SELECT id,username,email,birth_date,city,avatar,is_admin,created_at,last_seen FROM users WHERE LOWER(username)=LOWER($1) AND password_hash=$2 LIMIT 1`,[String(username||'').trim(),hashPassword(password||'')]);if(!rows.length)return res.status(401).json({error:"Login yoki parol noto'g'ri"});await db(`UPDATE users SET last_seen=NOW() WHERE id=$1`,[rows[0].id]);res.json({success:true,user:safeUser(rows[0]),token:String(rows[0].id)});}catch(e){console.error('LOGIN ERROR:',e);res.status(500).json({error:'Kirishda server xatosi'});}}
-app.post('/api/auth/register',register);app.post('/api/register',register);app.post('/api/auth/login',login);app.post('/api/login',login);app.get('/api/me',requireUser,async(req,res)=>res.json({success:true,user:safeUser(req.user)}));
+
+app.get(
+  "/api/health",
+  async (
+    req,
+    res
+  ) => {
+    try {
+      await db(
+        "SELECT 1"
+      );
+
+      res.json({
+        ok:
+          true,
+
+        database:
+          "connected",
+
+        gemini:
+          Boolean(
+            process.env
+              .GEMINI_API_KEY
+          ),
+
+        translator:
+          true,
+
+        weather:
+          true,
+
+        currency:
+          true,
+
+        wikipedia:
+          true,
+
+        wikidata:
+          true,
+
+        model:
+          process.env
+            .GEMINI_MODEL ||
+          "gemini-2.5-flash"
+      });
+    } catch (e) {
+      res.status(500).json({
+        ok:
+          false,
+        database:
+          "error",
+        error:
+          e.message
+      });
+    }
+  }
+);
+
+async function register(
+  req,
+  res
+) {
+  try {
+    const {
+      username,
+      email = "",
+      password
+    } =
+      req.body || {};
+
+    const un =
+      String(
+        username || ""
+      ).trim();
+
+    if (
+      un.length < 3 ||
+      String(
+        password || ""
+      ).length < 6
+    ) {
+      return res
+        .status(400)
+        .json({
+          error:
+            "Login kamida 3, parol kamida 6 belgidan iborat bo'lsin"
+        });
+    }
+
+    const rows =
+      await db(
+        `INSERT INTO users
+         (username, email, password_hash)
+         VALUES ($1, $2, $3)
+         RETURNING id, username, email, birth_date,
+                   city, avatar, is_admin,
+                   created_at, last_seen`,
+        [
+          un,
+          String(
+            email
+          ).trim(),
+          hashPassword(
+            password
+          )
+        ]
+      );
+
+    res
+      .status(201)
+      .json({
+        success:
+          true,
+
+        user:
+          safeUser(
+            rows[0]
+          ),
+
+        token:
+          String(
+            rows[0].id
+          )
+      });
+  } catch (e) {
+    if (
+      e.code ===
+      "23505"
+    ) {
+      return res
+        .status(409)
+        .json({
+          error:
+            "Bu login allaqachon mavjud"
+        });
+    }
+
+    console.error(
+      "REGISTER ERROR:",
+      e
+    );
+
+    res
+      .status(500)
+      .json({
+        error:
+          "Ro'yxatdan o'tishda server xatosi"
+      });
+  }
+}
+
+async function login(
+  req,
+  res
+) {
+  try {
+    const {
+      username,
+      password
+    } =
+      req.body || {};
+
+    const rows =
+      await db(
+        `SELECT id, username, email, birth_date,
+                city, avatar, is_admin,
+                created_at, last_seen
+         FROM users
+         WHERE LOWER(username) = LOWER($1)
+           AND password_hash = $2
+         LIMIT 1`,
+        [
+          String(
+            username || ""
+          ).trim(),
+
+          hashPassword(
+            password || ""
+          )
+        ]
+      );
+
+    if (
+      !rows.length
+    ) {
+      return res
+        .status(401)
+        .json({
+          error:
+            "Login yoki parol noto'g'ri"
+        });
+    }
+
+    await db(
+      `UPDATE users
+       SET last_seen = NOW()
+       WHERE id = $1`,
+      [
+        rows[0].id
+      ]
+    );
+
+    res.json({
+      success:
+        true,
+
+      user:
+        safeUser(
+          rows[0]
+        ),
+
+      token:
+        String(
+          rows[0].id
+        )
+    });
+  } catch (e) {
+    console.error(
+      "LOGIN ERROR:",
+      e
+    );
+
+    res
+      .status(500)
+      .json({
+        error:
+          "Kirishda server xatosi"
+      });
+  }
+}
+
+app.post(
+  "/api/auth/register",
+  register
+);
+
+app.post(
+  "/api/register",
+  register
+);
+
+app.post(
+  "/api/auth/login",
+  login
+);
+
+app.post(
+  "/api/login",
+  login
+);
+
+app.get(
+  "/api/me",
+  requireUser,
+  async (
+    req,
+    res
+  ) => {
+    res.json({
+      success:
+        true,
+
+      user:
+        safeUser(
+          req.user
+        )
+    });
+  }
+);
 
 // ============================================================
 // KNOWLEDGE CRUD
 // ============================================================
-app.get('/api/knowledge',requireUser,async(req,res)=>{try{const rows=await db(`SELECT id,title,question,answer,raw_text AS text,type,enabled,created_at,updated_at FROM knowledge WHERE enabled=TRUE ORDER BY id DESC`);res.json({success:true,knowledge:rows});}catch(e){console.error('KNOWLEDGE GET ERROR:',e);res.status(500).json({error:'Bilimlarni olishda xato'});}});
-app.post('/api/knowledge',requireAdmin,async(req,res)=>{try{const{title='',question='',answer='',text='',type='general',enabled=true}=req.body||{},raw=String(text||answer||'').trim();if(!raw)return res.status(400).json({error:"Bilim matni bo'sh"});const rows=await db(`INSERT INTO knowledge (title,question,answer,raw_text,type,enabled) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,title,question,answer,raw_text AS text,type,enabled,created_at,updated_at`,[String(title).trim(),String(question).trim(),String(answer||raw).trim(),raw,String(type),Boolean(enabled)]);res.status(201).json({success:true,knowledge:rows[0]});}catch(e){console.error('KNOWLEDGE ADD ERROR:',e);res.status(500).json({error:'Bilimni saqlashda xato'});}});
-app.delete('/api/knowledge/:id',requireAdmin,async(req,res)=>{try{const id=Number(req.params.id);if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({error:'Bilim ID noto‘g‘ri'});const rows=await db(`DELETE FROM knowledge WHERE id=$1 RETURNING id`,[id]);if(!rows.length)return res.status(404).json({error:'Bilim topilmadi'});res.json({success:true});}catch(e){console.error('KNOWLEDGE DELETE ERROR:',e);res.status(500).json({error:"Bilimni o'chirishda xato"});}});
-app.delete('/api/knowledge/all',requireAdmin,async(req,res)=>{try{await db(`TRUNCATE TABLE knowledge RESTART IDENTITY`);res.json({success:true,message:'Barcha bilimlar o‘chirildi'});}catch(e){console.error('KNOWLEDGE DELETE ALL ERROR:',e);res.status(500).json({error:"Barcha bilimlarni o‘chirishda xato"});}});
-app.get('/api/admin/knowledge',requireAdmin,async(req,res)=>{const rows=await db(`SELECT id,title,question,answer,raw_text AS text,type,enabled,created_at,updated_at FROM knowledge ORDER BY id DESC`);res.json({success:true,knowledge:rows});});
+
+app.get(
+  "/api/knowledge",
+  requireUser,
+  async (
+    req,
+    res
+  ) => {
+    try {
+      const rows =
+        await db(`
+          SELECT
+            id,
+            title,
+            question,
+            answer,
+            raw_text AS text,
+            type,
+            enabled,
+            created_at,
+            updated_at
+          FROM knowledge
+          WHERE enabled = TRUE
+          ORDER BY id DESC
+        `);
+
+      res.json({
+        success:
+          true,
+        knowledge:
+          rows
+      });
+    } catch (e) {
+      console.error(
+        "KNOWLEDGE GET ERROR:",
+        e
+      );
+
+      res
+        .status(500)
+        .json({
+          error:
+            "Bilimlarni olishda xato"
+        });
+    }
+  }
+);
+
+app.post(
+  "/api/knowledge",
+  requireAdmin,
+  async (
+    req,
+    res
+  ) => {
+    try {
+      const {
+        title = "",
+        question = "",
+        answer = "",
+        text = "",
+        type = "general",
+        enabled = true
+      } =
+        req.body || {};
+
+      const raw =
+        String(
+          text ||
+          answer ||
+          ""
+        ).trim();
+
+      if (!raw) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Bilim matni bo'sh"
+          });
+      }
+
+      const rows =
+        await db(
+          `INSERT INTO knowledge
+           (title, question, answer, raw_text,
+            type, enabled)
+           VALUES
+           ($1, $2, $3, $4, $5, $6)
+           RETURNING id, title, question,
+                     answer, raw_text AS text,
+                     type, enabled,
+                     created_at, updated_at`,
+          [
+            String(
+              title
+            ).trim(),
+
+            String(
+              question
+            ).trim(),
+
+            String(
+              answer ||
+              raw
+            ).trim(),
+
+            raw,
+
+            String(
+              type
+            ),
+
+            Boolean(
+              enabled
+            )
+          ]
+        );
+
+      res
+        .status(201)
+        .json({
+          success:
+            true,
+          knowledge:
+            rows[0]
+        });
+    } catch (e) {
+      console.error(
+        "KNOWLEDGE ADD ERROR:",
+        e
+      );
+
+      res
+        .status(500)
+        .json({
+          error:
+            "Bilimni saqlashda xato"
+        });
+    }
+  }
+);
+
+app.delete(
+  "/api/knowledge/:id",
+  requireAdmin,
+  async (
+    req,
+    res
+  ) => {
+    try {
+      const id =
+        Number(
+          req.params.id
+        );
+
+      if (
+        !Number.isSafeInteger(
+          id
+        ) ||
+        id <= 0
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Bilim ID noto‘g‘ri"
+          });
+      }
+
+      const rows =
+        await db(
+          `DELETE FROM knowledge
+           WHERE id = $1
+           RETURNING id`,
+          [id]
+        );
+
+      if (
+        !rows.length
+      ) {
+        return res
+          .status(404)
+          .json({
+            error:
+              "Bilim topilmadi"
+          });
+      }
+
+      res.json({
+        success:
+          true
+      });
+    } catch (e) {
+      console.error(
+        "KNOWLEDGE DELETE ERROR:",
+        e
+      );
+
+      res
+        .status(500)
+        .json({
+          error:
+            "Bilimni o'chirishda xato"
+        });
+    }
+  }
+);
+
+app.delete(
+  "/api/knowledge/all",
+  requireAdmin,
+  async (
+    req,
+    res
+  ) => {
+    try {
+      await db(
+        `TRUNCATE TABLE knowledge
+         RESTART IDENTITY`
+      );
+
+      res.json({
+        success:
+          true,
+        message:
+          "Barcha bilimlar o‘chirildi"
+      });
+    } catch (e) {
+      console.error(
+        "KNOWLEDGE DELETE ALL ERROR:",
+        e
+      );
+
+      res
+        .status(500)
+        .json({
+          error:
+            "Barcha bilimlarni o‘chirishda xato"
+        });
+    }
+  }
+);
+
+app.get(
+  "/api/admin/knowledge",
+  requireAdmin,
+  async (
+    req,
+    res
+  ) => {
+    const rows =
+      await db(`
+        SELECT
+          id,
+          title,
+          question,
+          answer,
+          raw_text AS text,
+          type,
+          enabled,
+          created_at,
+          updated_at
+        FROM knowledge
+        ORDER BY id DESC
+      `);
+
+    res.json({
+      success:
+        true,
+      knowledge:
+        rows
+    });
+  }
+);
 
 // ============================================================
 // SETTINGS / PROFILE
 // ============================================================
-app.get('/api/settings',requireAdmin,async(req,res)=>res.json({success:true,settings:await getSettings()}));
-app.put('/api/settings',requireAdmin,async(req,res)=>{try{const s=req.body||{};await db(`UPDATE settings SET agent_name=$1,brand_name=$2,role=$3,instruction=$4,must_rules=$5,never_rules=$6,customer_rules=$7,language=$8,tone=$9,emoji=$10,answer_length=$11,greeting=$12,ask_style=$13,model=$14,temperature=$15,max_tokens=$16,updated_at=NOW() WHERE id=1`,[s.agent_name||'Qamir',s.brand_name||'Qamir AI',s.role||'',s.instruction||'',s.must_rules||'',s.never_rules||'',s.customer_rules||'',s.language||'O‘zbek',s.tone||'Samimiy',s.emoji||'some',s.answer_length||'O‘rtacha',s.greeting||'Salom! Men Qamir AI. Sizga qanday yordam beray?',s.ask_style||'',s.model||'gemini-2.5-flash',Number(s.temperature??0.7),Number(s.max_tokens??1024)]);res.json({success:true});}catch(e){console.error('SETTINGS ERROR:',e);res.status(500).json({error:'Sozlamalarni saqlashda xato'});}});
-app.put('/api/profile',requireUser,async(req,res)=>{try{const{email='',birth_date='',city='',avatar='',password=''}=req.body||{};if(password&&String(password).length<6)return res.status(400).json({error:'Yangi parol kamida 6 belgi bo\'lsin'});if(password){await db(`UPDATE users SET email=$1,birth_date=$2,city=$3,avatar=$4,password_hash=$5,last_seen=NOW() WHERE id=$6`,[String(email).trim(),String(birth_date),String(city).trim(),String(avatar||'assets/avatar.svg'),hashPassword(password),req.user.id]);}else{await db(`UPDATE users SET email=$1,birth_date=$2,city=$3,avatar=$4,last_seen=NOW() WHERE id=$5`,[String(email).trim(),String(birth_date),String(city).trim(),String(avatar||'assets/avatar.svg'),req.user.id]);}const rows=await db(`SELECT id,username,email,birth_date,city,avatar,is_admin,created_at,last_seen FROM users WHERE id=$1`,[req.user.id]);res.json({success:true,user:safeUser(rows[0])});}catch(e){console.error('PROFILE ERROR:',e);res.status(500).json({error:'Profilni saqlashda xato'});}});
+
+app.get(
+  "/api/settings",
+  requireAdmin,
+  async (
+    req,
+    res
+  ) => {
+    res.json({
+      success:
+        true,
+      settings:
+        await getSettings()
+    });
+  }
+);
+
+app.put(
+  "/api/settings",
+  requireAdmin,
+  async (
+    req,
+    res
+  ) => {
+    try {
+      const s =
+        req.body || {};
+
+      await db(
+        `
+        UPDATE settings SET
+          agent_name = $1,
+          brand_name = $2,
+          role = $3,
+          instruction = $4,
+          must_rules = $5,
+          never_rules = $6,
+          customer_rules = $7,
+          language = $8,
+          tone = $9,
+          emoji = $10,
+          answer_length = $11,
+          greeting = $12,
+          ask_style = $13,
+          model = $14,
+          temperature = $15,
+          max_tokens = $16,
+          updated_at = NOW()
+        WHERE id = 1
+        `,
+        [
+          s.agent_name ||
+            "Qamir",
+
+          s.brand_name ||
+            "Qamir AI",
+
+          s.role ||
+            "",
+
+          s.instruction ||
+            "",
+
+          s.must_rules ||
+            "",
+
+          s.never_rules ||
+            "",
+
+          s.customer_rules ||
+            "",
+
+          s.language ||
+            "O‘zbek",
+
+          s.tone ||
+            "Samimiy",
+
+          s.emoji ||
+            "some",
+
+          s.answer_length ||
+            "O‘rtacha",
+
+          s.greeting ||
+            "Salom! Men Qamir AI. Sizga qanday yordam beray?",
+
+          s.ask_style ||
+            "",
+
+          s.model ||
+            "gemini-2.5-flash",
+
+          Number(
+            s.temperature ??
+            0.7
+          ),
+
+          Number(
+            s.max_tokens ??
+            1024
+          )
+        ]
+      );
+
+      res.json({
+        success:
+          true
+      });
+    } catch (e) {
+      console.error(
+        "SETTINGS ERROR:",
+        e
+      );
+
+      res
+        .status(500)
+        .json({
+          error:
+            "Sozlamalarni saqlashda xato"
+        });
+    }
+  }
+);
+
+app.put(
+  "/api/profile",
+  requireUser,
+  async (
+    req,
+    res
+  ) => {
+    try {
+      const {
+        email = "",
+        birth_date = "",
+        city = "",
+        avatar = "",
+        password = ""
+      } =
+        req.body || {};
+
+      if (
+        password &&
+        String(
+          password
+        ).length < 6
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Yangi parol kamida 6 belgi bo'lsin"
+          });
+      }
+
+      if (password) {
+        await db(
+          `
+          UPDATE users
+          SET
+            email = $1,
+            birth_date = $2,
+            city = $3,
+            avatar = $4,
+            password_hash = $5,
+            last_seen = NOW()
+          WHERE id = $6
+          `,
+          [
+            String(
+              email
+            ).trim(),
+
+            String(
+              birth_date
+            ),
+
+            String(
+              city
+            ).trim(),
+
+            String(
+              avatar ||
+              "assets/avatar.svg"
+            ),
+
+            hashPassword(
+              password
+            ),
+
+            req.user.id
+          ]
+        );
+      } else {
+        await db(
+          `
+          UPDATE users
+          SET
+            email = $1,
+            birth_date = $2,
+            city = $3,
+            avatar = $4,
+            last_seen = NOW()
+          WHERE id = $5
+          `,
+          [
+            String(
+              email
+            ).trim(),
+
+            String(
+              birth_date
+            ),
+
+            String(
+              city
+            ).trim(),
+
+            String(
+              avatar ||
+              "assets/avatar.svg"
+            ),
+
+            req.user.id
+          ]
+        );
+      }
+
+      const rows =
+        await db(
+          `
+          SELECT
+            id,
+            username,
+            email,
+            birth_date,
+            city,
+            avatar,
+            is_admin,
+            created_at,
+            last_seen
+          FROM users
+          WHERE id = $1
+          `,
+          [
+            req.user.id
+          ]
+        );
+
+      res.json({
+        success:
+          true,
+        user:
+          safeUser(
+            rows[0]
+          )
+      });
+    } catch (e) {
+      console.error(
+        "PROFILE ERROR:",
+        e
+      );
+
+      res
+        .status(500)
+        .json({
+          error:
+            "Profilni saqlashda xato"
+        });
+    }
+  }
+);
 
 // ============================================================
 // CHAT
 // ============================================================
-app.get('/api/chat/history',requireUser,async(req,res)=>{const rows=await db(`SELECT id,sender,text,created_at FROM messages WHERE user_id=$1 ORDER BY created_at ASC LIMIT 300`,[req.user.id]);res.json({success:true,messages:rows});});
-app.post('/api/chat',requireUser,async(req,res)=>{
-  try{
-    const text=String(req.body?.message||req.body?.text||'').trim();if(!text)return res.status(400).json({error:"Xabar bo'sh"});
-    const previous=await db(`SELECT sender,text FROM messages WHERE user_id=$1 ORDER BY created_at DESC LIMIT 40`,[req.user.id]),history=previous.reverse();
-    await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'user',$2)`,[req.user.id,text]); await db(`UPDATE users SET last_seen=NOW() WHERE id=$1`,[req.user.id]);
-    const dateTimeAnswer=getDateTimeAnswer(text);if(dateTimeAnswer){const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,dateTimeAnswer.answer]);return res.json({success:true,answer:dateTimeAnswer.answer,source:dateTimeAnswer.source,matched_knowledge:[],message:saved[0]});}
-    if(looksLikeWeatherQuestion(text)){
-      try{
-        const weather=await getWeatherAnswer(text,req.user.city);
-        if(weather){
-          const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,weather.answer]);
-          return res.json({success:true,answer:weather.answer,source:weather.source,matched_knowledge:[],weather:{city:weather.city||null,latitude:weather.latitude||null,longitude:weather.longitude||null},message:saved[0]});
-        }
-      }catch(e){
-        console.error('WEATHER ERROR:',e.message);
-        const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,'Ob-havo xizmati hozircha ishlamadi. Iltimos, birozdan keyin yana urinib ko‘ring.']);
-        return res.json({success:true,answer:saved[0].text,source:'weather_error',matched_knowledge:[],message:saved[0]});
-      }
-    }
 
-    // ========================================================
-    // 1. VALYUTA KURSLARI
-    // ========================================================
+app.get(
+  "/api/chat/history",
+  requireUser,
+  async (
+    req,
+    res
+  ) => {
+    const rows =
+      await db(
+        `
+        SELECT
+          id,
+          sender,
+          text,
+          created_at
+        FROM messages
+        WHERE user_id = $1
+        ORDER BY created_at ASC
+        LIMIT 300
+        `,
+        [
+          req.user.id
+        ]
+      );
 
-    if (looksLikeCurrencyQuestion(text)) {
-      try {
-        const currency = await getCurrencyAnswer(text);
+    res.json({
+      success:
+        true,
+      messages:
+        rows
+    });
+  }
+);
 
-        if (currency) {
-          const saved = await db(
-            `INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,
-            [req.user.id, currency.answer]
-          );
+app.post(
+  "/api/chat",
+  requireUser,
+  async (
+    req,
+    res
+  ) => {
+    try {
+      const text =
+        String(
+          req.body?.message ||
+          req.body?.text ||
+          ""
+        ).trim();
 
-          return res.json({
-            success: true,
-            answer: currency.answer,
-            source: currency.source,
-            matched_knowledge: [],
-            currency: {
-              code: currency.currency || null,
-              amount: currency.amount ?? null,
-              sum: currency.sum ?? null,
-              date: currency.date || null
-            },
-            message: saved[0]
+      if (!text) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Xabar bo'sh"
           });
-        }
-      } catch (e) {
-        console.error('CURRENCY ERROR:', e.message);
+      }
 
-        const saved = await db(
-          `INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,
-          [req.user.id, 'Valyuta kurslari xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring.']
+      const previous =
+        await db(
+          `
+          SELECT
+            sender,
+            text
+          FROM messages
+          WHERE user_id = $1
+          ORDER BY created_at DESC
+          LIMIT 40
+          `,
+          [
+            req.user.id
+          ]
         );
 
+      const history =
+        previous.reverse();
+
+      await db(
+        `INSERT INTO messages
+         (user_id, sender, text)
+         VALUES ($1, 'user', $2)`,
+        [
+          req.user.id,
+          text
+        ]
+      );
+
+      await db(
+        `UPDATE users
+         SET last_seen = NOW()
+         WHERE id = $1`,
+        [
+          req.user.id
+        ]
+      );
+
+      // ======================================================
+      // 0. SANA / VAQT
+      // ======================================================
+
+      const dateTimeAnswer =
+        getDateTimeAnswer(
+          text
+        );
+
+      if (
+        dateTimeAnswer
+      ) {
+        const saved =
+          await db(
+            `
+            INSERT INTO messages
+              (user_id, sender, text)
+            VALUES
+              ($1, 'assistant', $2)
+            RETURNING
+              id,
+              sender,
+              text,
+              created_at
+            `,
+            [
+              req.user.id,
+              dateTimeAnswer.answer
+            ]
+          );
+
         return res.json({
-          success: true,
-          answer: saved[0].text,
-          source: 'currency_error',
-          matched_knowledge: [],
-          message: saved[0]
+          success:
+            true,
+          answer:
+            dateTimeAnswer.answer,
+          source:
+            dateTimeAnswer.source,
+          matched_knowledge:
+            [],
+          message:
+            saved[0]
         });
       }
-    }
 
-    const calc=tryCalculate(text);if(calc){const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,calc.answer]);return res.json({success:true,answer:calc.answer,source:'calculator',matched_knowledge:[],calculation:{expression:calc.expression,result:calc.result},message:saved[0]});}
-    const translationRequest=findTranslationIntent(text);
-    if(translationRequest){try{const translated=await tryTranslate(text);if(translated){const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,translated.translated]);return res.json({success:true,answer:translated.translated,source:'translator',matched_knowledge:[],translation:{source_text:translated.sourceText,target_language:translated.targetCode,detected_source_language:translated.detectedSource||null},message:saved[0]});}}catch(e){console.error('TRANSLATOR ERROR:',e.message);const fallback=e.message||'Tarjima xizmati hozircha javob bermadi.';const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,`Tarjima xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring.`]);return res.json({success:true,answer:saved[0].text,source:'translator_error',error:fallback,matched_knowledge:[],message:saved[0]});}}
-    const matches=await findKnowledge(text,8),trusted=chooseKnowledgeAnswer(matches);let answer=null,source='unknown';if(trusted){answer=String(trusted.answer||'').trim();source='qamir_knowledge';}
-    // ========================================================
-    // 4. WIKIDATA
-    // ========================================================
+      // ======================================================
+      // 1. OB-HAVO
+      // ======================================================
 
-    if(!answer){
-      try{
-        const wikidata=await searchWikidata(text);
-        if(wikidata){
-          answer=wikidata.answer;
-          source='wikidata';
+      if (
+        looksLikeWeatherQuestion(
+          text
+        )
+      ) {
+        try {
+          const weather =
+            await getWeatherAnswer(
+              text,
+              req.user.city
+            );
+
+          if (weather) {
+            const saved =
+              await db(
+                `
+                INSERT INTO messages
+                  (user_id, sender, text)
+                VALUES
+                  ($1, 'assistant', $2)
+                RETURNING
+                  id,
+                  sender,
+                  text,
+                  created_at
+                `,
+                [
+                  req.user.id,
+                  weather.answer
+                ]
+              );
+
+            return res.json({
+              success:
+                true,
+              answer:
+                weather.answer,
+              source:
+                weather.source,
+              matched_knowledge:
+                [],
+              weather: {
+                city:
+                  weather.city ||
+                  null,
+                latitude:
+                  weather.latitude ||
+                  null,
+                longitude:
+                  weather.longitude ||
+                  null
+              },
+              message:
+                saved[0]
+            });
+          }
+        } catch (e) {
+          console.error(
+            "WEATHER ERROR:",
+            e.message
+          );
+
+          const saved =
+            await db(
+              `
+              INSERT INTO messages
+                (user_id, sender, text)
+              VALUES
+                ($1, 'assistant', $2)
+              RETURNING
+                id,
+                sender,
+                text,
+                created_at
+              `,
+              [
+                req.user.id,
+                "Ob-havo xizmati hozircha ishlamadi. Iltimos, birozdan keyin yana urinib ko‘ring."
+              ]
+            );
+
+          return res.json({
+            success:
+              true,
+            answer:
+              saved[0].text,
+            source:
+              "weather_error",
+            matched_knowledge:
+              [],
+            message:
+              saved[0]
+          });
         }
-      }catch(e){
-        console.error('WIKIDATA ERROR:',e);
       }
+
+      // ======================================================
+      // 2. VALYUTA
+      // ======================================================
+
+      if (
+        looksLikeCurrencyQuestion(
+          text
+        )
+      ) {
+        try {
+          const currency =
+            await getCurrencyAnswer(
+              text
+            );
+
+          if (currency) {
+            const saved =
+              await db(
+                `
+                INSERT INTO messages
+                  (user_id, sender, text)
+                VALUES
+                  ($1, 'assistant', $2)
+                RETURNING
+                  id,
+                  sender,
+                  text,
+                  created_at
+                `,
+                [
+                  req.user.id,
+                  currency.answer
+                ]
+              );
+
+            return res.json({
+              success:
+                true,
+              answer:
+                currency.answer,
+              source:
+                currency.source,
+              matched_knowledge:
+                [],
+              currency: {
+                code:
+                  currency.currency ||
+                  null,
+                amount:
+                  currency.amount ??
+                  null,
+                sum:
+                  currency.sum ??
+                  null,
+                date:
+                  currency.date ||
+                  null
+              },
+              message:
+                saved[0]
+            });
+          }
+        } catch (e) {
+          console.error(
+            "CURRENCY ERROR:",
+            e.message
+          );
+
+          const saved =
+            await db(
+              `
+              INSERT INTO messages
+                (user_id, sender, text)
+              VALUES
+                ($1, 'assistant', $2)
+              RETURNING
+                id,
+                sender,
+                text,
+                created_at
+              `,
+              [
+                req.user.id,
+                "Valyuta kurslari xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring."
+              ]
+            );
+
+          return res.json({
+            success:
+              true,
+            answer:
+              saved[0].text,
+            source:
+              "currency_error",
+            matched_knowledge:
+              [],
+            message:
+              saved[0]
+          });
+        }
+      }
+
+      // ======================================================
+      // 3. CALCULATOR
+      // ======================================================
+
+      const calc =
+        tryCalculate(
+          text
+        );
+
+      if (calc) {
+        const saved =
+          await db(
+            `
+            INSERT INTO messages
+              (user_id, sender, text)
+            VALUES
+              ($1, 'assistant', $2)
+            RETURNING
+              id,
+              sender,
+              text,
+              created_at
+            `,
+            [
+              req.user.id,
+              calc.answer
+            ]
+          );
+
+        return res.json({
+          success:
+            true,
+          answer:
+            calc.answer,
+          source:
+            "calculator",
+          matched_knowledge:
+            [],
+          calculation: {
+            expression:
+              calc.expression,
+            result:
+              calc.result
+          },
+          message:
+            saved[0]
+        });
+      }
+
+      // ======================================================
+      // 4. TRANSLATOR
+      // ======================================================
+
+      const translationRequest =
+        findTranslationIntent(
+          text
+        );
+
+      if (
+        translationRequest
+      ) {
+        try {
+          const translated =
+            await tryTranslate(
+              text
+            );
+
+          if (
+            translated
+          ) {
+            const saved =
+              await db(
+                `
+                INSERT INTO messages
+                  (user_id, sender, text)
+                VALUES
+                  ($1, 'assistant', $2)
+                RETURNING
+                  id,
+                  sender,
+                  text,
+                  created_at
+                `,
+                [
+                  req.user.id,
+                  translated.translated
+                ]
+              );
+
+            return res.json({
+              success:
+                true,
+              answer:
+                translated.translated,
+              source:
+                "translator",
+              matched_knowledge:
+                [],
+              translation: {
+                source_text:
+                  translated.sourceText,
+                target_language:
+                  translated.targetCode,
+                detected_source_language:
+                  translated.detectedSource ||
+                  null
+              },
+              message:
+                saved[0]
+            });
+          }
+        } catch (e) {
+          console.error(
+            "TRANSLATOR ERROR:",
+            e.message
+          );
+
+          const saved =
+            await db(
+              `
+              INSERT INTO messages
+                (user_id, sender, text)
+              VALUES
+                ($1, 'assistant', $2)
+              RETURNING
+                id,
+                sender,
+                text,
+                created_at
+              `,
+              [
+                req.user.id,
+                "Tarjima xizmati hozircha javob bermadi. Iltimos, birozdan keyin yana urinib ko‘ring."
+              ]
+            );
+
+          return res.json({
+            success:
+              true,
+            answer:
+              saved[0].text,
+            source:
+              "translator_error",
+            matched_knowledge:
+              [],
+            message:
+              saved[0]
+          });
+        }
+      }
+
+      // ======================================================
+      // 5. QAMIR BILIM BAZASI
+      // ======================================================
+
+      const matches =
+        await findKnowledge(
+          text,
+          8
+        );
+
+      const trusted =
+        chooseKnowledgeAnswer(
+          matches
+        );
+
+      let answer =
+        null;
+
+      let source =
+        "unknown";
+
+      if (
+        trusted
+      ) {
+        answer =
+          String(
+            trusted.answer ||
+            ""
+          ).trim();
+
+        source =
+          "qamir_knowledge";
+      }
+
+      // ======================================================
+      // 6. WIKIPEDIA
+      //
+      // MUHIM:
+      // Oldin Wikidata edi.
+      // Endi avval Wikipedia tekshiriladi.
+      // ======================================================
+
+      if (!answer) {
+        try {
+          console.log(
+            "Wikipedia tekshirilmoqda:",
+            text
+          );
+
+          const wiki =
+            await searchWikipedia(
+              text
+            );
+
+          if (wiki) {
+            const wikiText =
+              [
+                wiki.description,
+                wiki.extract
+              ]
+                .filter(Boolean)
+                .join(
+                  "\n\n"
+                )
+                .trim();
+
+            if (
+              wikiText
+            ) {
+              answer =
+                `${wiki.title}\n\n${wikiText}`;
+
+              source =
+                "wikipedia";
+
+              console.log(
+                "Wikipedia javobi tayyor:",
+                wiki.title
+              );
+            }
+          }
+        } catch (e) {
+          console.error(
+            "WIKIPEDIA ERROR:",
+            e
+          );
+        }
+      }
+
+      // ======================================================
+      // 7. WIKIDATA
+      //
+      // Wikipedia javob topmasa keyin ishlaydi.
+      // ======================================================
+
+      if (!answer) {
+        try {
+          console.log(
+            "Wikidata tekshirilmoqda:",
+            text
+          );
+
+          const wikidata =
+            await searchWikidata(
+              text
+            );
+
+          if (
+            wikidata
+          ) {
+            answer =
+              wikidata.answer;
+
+            source =
+              "wikidata";
+
+            console.log(
+              "Wikidata javobi tayyor:",
+              wikidata.title,
+              wikidata.id
+            );
+          }
+        } catch (e) {
+          console.error(
+            "WIKIDATA ERROR:",
+            e
+          );
+        }
+      }
+
+      // ======================================================
+      // 8. GEMINI
+      // ======================================================
+
+      if (!answer) {
+        const usefulContext =
+          matches
+            .filter(
+              x =>
+                x.score >= 75
+            )
+            .slice(
+              0,
+              4
+            );
+
+        try {
+          answer =
+            await askGemini(
+              text,
+              history,
+              usefulContext
+            );
+
+          if (
+            answer
+          ) {
+            source =
+              "gemini_assist";
+          }
+        } catch (e) {
+          console.error(
+            "GEMINI ERROR:",
+            e.message
+          );
+        }
+      }
+
+      // ======================================================
+      // 9. NO ANSWER
+      // ======================================================
+
+      if (!answer) {
+        answer =
+          "Bu savol bo‘yicha Qamir AI bilim bazasida hozircha yetarli ma’lumot yo‘q.";
+
+        source =
+          "no_knowledge";
+      }
+
+      const saved =
+        await db(
+          `
+          INSERT INTO messages
+            (user_id, sender, text)
+          VALUES
+            ($1, 'assistant', $2)
+          RETURNING
+            id,
+            sender,
+            text,
+            created_at
+          `,
+          [
+            req.user.id,
+            answer
+          ]
+        );
+
+      res.json({
+        success:
+          true,
+
+        answer,
+
+        source,
+
+        matched_knowledge:
+          matches
+            .slice(
+              0,
+              3
+            )
+            .map(
+              x => ({
+                id:
+                  x.id,
+                title:
+                  x.title,
+                question:
+                  x.question,
+                score:
+                  x.score
+              })
+            ),
+
+        message:
+          saved[0]
+      });
+    } catch (e) {
+      console.error(
+        "CHAT ERROR:",
+        e
+      );
+
+      res
+        .status(500)
+        .json({
+          error:
+            "Chat server xatosi"
+        });
     }
-
-    // ========================================================
-    // 5. WIKIPEDIA
-    // ========================================================
-
-    if(!answer){try{const wiki=await searchWikipedia(text);if(wiki){const wikiText=[wiki.description,wiki.extract].filter(Boolean).join('\n\n').trim();if(wikiText){answer=`${wiki.title}\n\n${wikiText}`;source='wikipedia';}}}catch(e){console.error('WIKIPEDIA ERROR:',e);}}
-    if(!answer){const usefulContext=matches.filter(x=>x.score>=75).slice(0,4);try{answer=await askGemini(text,history,usefulContext);if(answer)source='gemini_assist';}catch(e){console.error('GEMINI ERROR:',e.message);}}
-    if(!answer){answer='Bu savol bo‘yicha Qamir AI bilim bazasida hozircha yetarli ma’lumot yo‘q.';source='no_knowledge';}
-    const saved=await db(`INSERT INTO messages (user_id,sender,text) VALUES ($1,'assistant',$2) RETURNING id,sender,text,created_at`,[req.user.id,answer]);res.json({success:true,answer,source,matched_knowledge:matches.slice(0,3).map(x=>({id:x.id,title:x.title,question:x.question,score:x.score})),message:saved[0]});
-  }catch(e){console.error('CHAT ERROR:',e);res.status(500).json({error:'Chat server xatosi'});}
-});
+  }
+);
 
 // ============================================================
 // ADMIN STATS / IMPROVEMENT
 // ============================================================
-app.get('/api/admin/stats',requireAdmin,async(req,res)=>{const[m,k,u]=await Promise.all([db(`SELECT COUNT(*)::int AS n FROM messages`),db(`SELECT COUNT(*)::int AS n FROM knowledge WHERE enabled=TRUE`),db(`SELECT COUNT(*)::int AS n FROM users`)]);res.json({success:true,messages:m[0].n,knowledge:k[0].n,users:u[0].n});});
-app.get('/api/admin/improve',requireAdmin,async(req,res)=>{const rows=await db(`SELECT id,title,text,status,created_at FROM suggestions WHERE status='pending' ORDER BY id DESC`);res.json({success:true,suggestions:rows});});
-app.post('/api/admin/improve/analyze',requireAdmin,async(req,res)=>{const rows=await db(`SELECT text FROM messages WHERE sender='user' ORDER BY id DESC LIMIT 500`),counts=new Map();for(const row of rows){for(const w of tokenize(row.text).filter(x=>x.length>=5))counts.set(w,(counts.get(w)||0)+1);}for(const[topic,count]of[...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10)){if(count<3)continue;const exists=await db(`SELECT id FROM knowledge WHERE LOWER(question||' '||title||' '||answer) LIKE '%'||LOWER($1)||'%' LIMIT 1`,[topic]);if(!exists.length)await db(`INSERT INTO suggestions(title,text) VALUES($1,$2)`,['Ko‘p so‘raladigan mavzu',`Mijozlar “${topic}” mavzusini ${count} marta tilga oldi. Shu mavzu bo‘yicha aniq bilim qo‘shish foydali.`]);}res.json({success:true});});
-app.post('/api/admin/improve/:id/approve',requireAdmin,async(req,res)=>{const rows=await db(`SELECT id,title,text FROM suggestions WHERE id=$1 AND status='pending'`,[Number(req.params.id)]);if(!rows.length)return res.status(404).json({error:'Taklif topilmadi'});const s=rows[0];await db(`INSERT INTO knowledge(title,question,answer,raw_text,type) VALUES($1,'',$2,$2,'general')`,[s.title,s.text]);await db(`UPDATE suggestions SET status='approved' WHERE id=$1`,[s.id]);res.json({success:true});});
-app.post('/api/admin/improve/:id/reject',requireAdmin,async(req,res)=>{await db(`UPDATE suggestions SET status='rejected' WHERE id=$1`,[Number(req.params.id)]);res.json({success:true});});
 
-app.use(express.static(__dirname));
-initDb().then(()=>{app.listen(PORT,'0.0.0.0',()=>{console.log(`Qamir AI server running on port ${PORT}`);console.log('PostgreSQL: connected');console.log(`Gemini API key: ${process.env.GEMINI_API_KEY?'configured':'NOT configured'}`);console.log(`Gemini model: ${process.env.GEMINI_MODEL||'gemini-2.5-flash'}`);console.log('Advanced calculator: enabled');console.log('Translator: Google public + LibreTranslate fallback enabled');console.log('Translator API key: not required');console.log('Uzbekistan date/time: enabled');console.log('Wikipedia search: enabled');console.log('Weather: Open-Meteo enabled (API key not required)');
-    console.log('Currency: CBU Uzbekistan official JSON enabled (API key not required)');console.log('Knowledge search: strict matching enabled');});}).catch(error=>{console.error('DATABASE INIT ERROR:',error);process.exit(1);});
-process.on('SIGTERM',async()=>{await pool.end();process.exit(0);});
-process.on('SIGINT',async()=>{await pool.end();process.exit(0);});
+app.get(
+  "/api/admin/stats",
+  requireAdmin,
+  async (
+    req,
+    res
+  ) => {
+    const [
+      m,
+      k,
+      u
+    ] =
+      await Promise.all([
+        db(`
+          SELECT
+            COUNT(*)::int AS n
+          FROM messages
+        `),
+
+        db(`
+          SELECT
+            COUNT(*)::int AS n
+          FROM knowledge
+          WHERE enabled = TRUE
+        `),
+
+        db(`
+          SELECT
+            COUNT(*)::int AS n
+          FROM users
+        `)
+      ]);
+
+    res.json({
+      success:
+        true,
+
+      messages:
+        m[0].n,
+
+      knowledge:
+        k[0].n,
+
+      users:
+        u[0].n
+    });
+  }
+);
+
+app.get(
+  "/api/admin/improve",
+  requireAdmin,
+  async (
+    req,
+    res
+  ) => {
+    const rows =
+      await db(`
+        SELECT
+          id,
+          title,
+          text,
+          status,
+          created_at
+        FROM suggestions
+        WHERE status = 'pending'
+        ORDER BY id DESC
+      `);
+
+    res.json({
+      success:
+        true,
+
+      suggestions:
+        rows
+    });
+  }
+);
+
+app.post(
+  "/api/admin/improve/analyze",
+  requireAdmin,
+  async (
+    req,
+    res
+  ) => {
+    const rows =
+      await db(`
+        SELECT text
+        FROM messages
+        WHERE sender = 'user'
+        ORDER BY id DESC
+        LIMIT 500
+      `);
+
+    const counts =
+      new Map();
+
+    for (
+      const row
+      of rows
+    ) {
+      const ws =
+        tokenize(
+          row.text
+        )
+          .filter(
+            w =>
+              w.length >= 5
+          );
+
+      for (
+        const w
+        of ws
+      ) {
+        counts.set(
+          w,
+          (
+            counts.get(w) ||
+            0
+          ) + 1
+        );
+      }
+    }
+
+    const top =
+      [
+        ...counts.entries()
+      ]
+        .sort(
+          (a, b) =>
+            b[1] -
+            a[1]
+        )
+        .slice(
+          0,
+          10
+        );
+
+    for (
+      const [
+        topic,
+        count
+      ]
+      of top
+    ) {
+      if (
+        count < 3
+      ) {
+        continue;
+      }
+
+      const exists =
+        await db(
+          `SELECT id
+           FROM knowledge
+           WHERE LOWER(
+             question || ' ' ||
+             title || ' ' ||
+             answer
+           ) LIKE
+             '%' ||
+             LOWER($1) ||
+             '%'
+           LIMIT 1`,
+          [
+            topic
+          ]
+        );
+
+      if (
+        !exists.length
+      ) {
+        await db(
+          `INSERT INTO suggestions
+             (title, text)
+           VALUES
+             ($1, $2)`,
+          [
+            "Ko‘p so‘raladigan mavzu",
+
+            `Mijozlar “${topic}” mavzusini ${count} marta tilga oldi. Shu mavzu bo‘yicha aniq bilim qo‘shish foydali.`
+          ]
+        );
+      }
+    }
+
+    res.json({
+      success:
+        true
+    });
+  }
+);
+
+app.post(
+  "/api/admin/improve/:id/approve",
+  requireAdmin,
+  async (
+    req,
+    res
+  ) => {
+    const rows =
+      await db(
+        `SELECT
+           id,
+           title,
+           text
+         FROM suggestions
+         WHERE id = $1
+           AND status = 'pending'`,
+        [
+          Number(
+            req.params.id
+          )
+        ]
+      );
+
+    if (
+      !rows.length
+    ) {
+      return res
+        .status(404)
+        .json({
+          error:
+            "Taklif topilmadi"
+        });
+    }
+
+    const s =
+      rows[0];
+
+    await db(
+      `INSERT INTO knowledge
+        (title, question, answer,
+         raw_text, type)
+       VALUES
+        ($1, '', $2, $2, 'general')`,
+      [
+        s.title,
+        s.text
+      ]
+    );
+
+    await db(
+      `UPDATE suggestions
+       SET status = 'approved'
+       WHERE id = $1`,
+      [
+        s.id
+      ]
+    );
+
+    res.json({
+      success:
+        true
+    });
+  }
+);
+
+app.post(
+  "/api/admin/improve/:id/reject",
+  requireAdmin,
+  async (
+    req,
+    res
+  ) => {
+    await db(
+      `UPDATE suggestions
+       SET status = 'rejected'
+       WHERE id = $1`,
+      [
+        Number(
+          req.params.id
+        )
+      ]
+    );
+
+    res.json({
+      success:
+        true
+    });
+  }
+);
+
+// ============================================================
+// STATIC FRONTEND
+// ============================================================
+
+app.use(
+  express.static(
+    __dirname
+  )
+);
+
+initDb()
+  .then(
+    () => {
+      app.listen(
+        PORT,
+        "0.0.0.0",
+        () => {
+          console.log(
+            `Qamir AI server running on port ${PORT}`
+          );
+
+          console.log(
+            "PostgreSQL: connected"
+          );
+
+          console.log(
+            `Gemini API key: ${
+              process.env
+                .GEMINI_API_KEY
+                ? "configured"
+                : "NOT configured"
+            }`
+          );
+
+          console.log(
+            `Gemini model: ${
+              process.env
+                .GEMINI_MODEL ||
+              "gemini-2.5-flash"
+            }`
+          );
+
+          console.log(
+            "Advanced calculator: enabled"
+          );
+
+          console.log(
+            "Translator: Google public + LibreTranslate fallback enabled"
+          );
+
+          console.log(
+            "Translator API key: not required"
+          );
+
+          console.log(
+            "Uzbekistan date/time: enabled"
+          );
+
+          console.log(
+            "Wikipedia: Uzbek + English + Russian fallback enabled"
+          );
+
+          console.log(
+            "Wikipedia: checked before Wikidata"
+          );
+
+          console.log(
+            "Wikidata: structured entity lookup enabled"
+          );
+
+          console.log(
+            "Wikidata: human entity protection enabled"
+          );
+
+          console.log(
+            "Weather: Open-Meteo enabled (API key not required)"
+          );
+
+          console.log(
+            "Currency: CBU Uzbekistan official JSON enabled"
+          );
+
+          console.log(
+            "Currency: $ symbol supported"
+          );
+
+          console.log(
+            "Knowledge search: strict matching enabled"
+          );
+        }
+      );
+    }
+  )
+  .catch(
+    error => {
+      console.error(
+        "DATABASE INIT ERROR:",
+        error
+      );
+
+      process.exit(1);
+    }
+  );
+
+process.on(
+  "SIGTERM",
+  async () => {
+    await pool.end();
+    process.exit(0);
+  }
+);
+
+process.on(
+  "SIGINT",
+  async () => {
+    await pool.end();
+    process.exit(0);
+  }
+);
