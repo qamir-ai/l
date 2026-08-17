@@ -1342,9 +1342,42 @@ async function getDictionaryAnswer(text) {
   const word = cleanDictionaryQuery(text);
   if (!word || word.length < 2) return null;
 
+  // Qamir AI ichidagi Gemini kaliti mavjud bo‘lsa,
+  // o‘zbekcha lug‘at so‘rovlari uchun birinchi navbatda
+  // aniq lug‘aviy izoh olamiz. Alohida API key kerak emas.
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const fallback = await askGemini(
+        `Quyidagi so‘z yoki iboraning LUG‘AVIY ma’nosini o‘zbek tilida qisqa va aniq tushuntir. ` +
+        `Faqat ta’rifni ber; manba, URL, "Manba:" yoki boshqa qidiruv izohlarini yozma. ` +
+        `So‘z: ${word}`,
+        [],
+        []
+      );
+
+      if (fallback) {
+        const cleaned = String(fallback)
+          .replace(/^\s*manba\s*:\s*.*$/gim, "")
+          .replace(/^\s*source\s*:\s*.*$/gim, "")
+          .trim();
+
+        if (cleaned) {
+          return {
+            answer: `📖 ${word}\n\n${cleaned}`,
+            source: "dictionary_gemini",
+            word,
+            language: "uz"
+          };
+        }
+      }
+    } catch (e) {
+      console.error("DICTIONARY GEMINI PRIMARY ERROR:", e.message);
+    }
+  }
+
   const languageCandidates = dictionaryLanguageCandidates(word);
 
-  // 1) Wiktionary — ko‘p tilli, API key kerak emas.
+  // 2) Wiktionary — API key kerak emas.
   for (const language of languageCandidates) {
     try {
       const page = await wiktionaryLookup(language, word);
@@ -1357,32 +1390,35 @@ async function getDictionaryAnswer(text) {
           ? `${cleaned.slice(0, 2200).trim()}…`
           : cleaned;
 
-        return {
-          answer: `📖 ${page.title}\n\n${clipped}\n\nManba: Wiktionary`,
-          source: "dictionary_wiktionary",
-          word: page.title,
-          language
-        };
+        if (clipped) {
+          return {
+            answer: `📖 ${page.title}\n\n${clipped}`,
+            source: "dictionary_wiktionary",
+            word: page.title,
+            language
+          };
+        }
       }
     } catch (e) {
       console.error(`DICTIONARY WIKTIONARY ${language.toUpperCase()} ERROR:`, e.message);
     }
   }
 
-  // 2) Free Dictionary API — API key talab qilmaydi.
+  // 3) Free Dictionary API — asosan inglizcha/ruscha so‘zlar uchun.
   for (const language of languageCandidates) {
     if (language === "uz") continue;
+
     try {
       const entries = await dictionaryApiLookup(language, word);
       if (!entries.length) continue;
 
       const lines = [`📖 ${entries[0].word}`];
+
       for (const item of entries.slice(0, 5)) {
         const prefix = item.partOfSpeech ? `${item.partOfSpeech}: ` : "";
         lines.push(`• ${prefix}${item.definition}`);
         if (item.example) lines.push(`  Misol: ${item.example}`);
       }
-      lines.push("", `Manba: Free Dictionary API (${language.toUpperCase()})`);
 
       return {
         answer: lines.join("\n"),
@@ -1392,27 +1428,6 @@ async function getDictionaryAnswer(text) {
       };
     } catch (e) {
       console.error(`DICTIONARY API ${language.toUpperCase()} ERROR:`, e.message);
-    }
-  }
-
-  // 3) Faqat lug‘at buyrug‘i uchun Gemini yordamchi fallback.
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      const fallback = await askGemini(
-        `Quyidagi so‘z yoki iboraning lug‘aviy ma’nosini qisqa va aniq o‘zbek tilida tushuntir: ${word}`,
-        [],
-        []
-      );
-
-      if (fallback) {
-        return {
-          answer: `📖 ${word}\n\n${fallback}\n\nManba: Qamir AI lug‘at yordamchisi`,
-          source: "dictionary_gemini",
-          word
-        };
-      }
-    } catch (e) {
-      console.error("DICTIONARY GEMINI FALLBACK ERROR:", e.message);
     }
   }
 
@@ -1654,8 +1669,6 @@ async function getSmartSearchAnswer(text) {
     if (item.url) lines.push(`   ${item.url}`);
     lines.push("");
   });
-
-  lines.push("Manba: DuckDuckGo qidiruvi");
 
   return {
     answer: lines.join("\n").trim(),
